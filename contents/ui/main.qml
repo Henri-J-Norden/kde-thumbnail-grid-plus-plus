@@ -51,13 +51,7 @@ KWin.TabBoxSwitcher {
             //-- Configuration Constants --
             readonly property int iconSize: Kirigami.Units.iconSizes.huge
             readonly property int thumbnailWidth: Kirigami.Units.gridUnit * 16
-            readonly property real screenFactor: {
-                if (tabBox.screenGeometry.height > 0) {
-                    return tabBox.screenGeometry.width / tabBox.screenGeometry.height;
-                }
-                return 1.777; // Fallback 16:9
-            }
-            readonly property int thumbnailHeight: thumbnailWidth * (1.0/screenFactor)
+            readonly property int thumbnailHeight: thumbnailWidth * (9.0/16.0)
             
             readonly property int cellMargin: Kirigami.Units.largeSpacing
             readonly property int cellWidth: thumbnailWidth + cellMargin * 2

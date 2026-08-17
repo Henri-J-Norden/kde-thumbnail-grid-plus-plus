@@ -160,6 +160,24 @@ KWin.TabBoxSwitcher {
                 }
             }
 
+            property bool mouseNavActive: false
+
+            Timer {
+                id: armTimer
+                interval: Kirigami.Units.veryLongDuration
+                onTriggered: dialogMainItem.mouseNavActive = true
+            }
+
+            Connections {
+                target: tabBox
+                function onVisibleChanged() {
+                    dialogMainItem.mouseNavActive = false
+                    if (tabBox.visible) {
+                        armTimer.start()
+                    }
+                }
+            }
+
             Flow {
                 id: flow
                 anchors.fill: parent
@@ -184,6 +202,11 @@ KWin.TabBoxSwitcher {
                         MouseArea {
                             anchors.fill: parent
                             onClicked: tabBox.model.activate(index)
+                            hoverEnabled: true
+                            onPositionChanged: {
+                                if (dialogMainItem.mouseNavActive)
+                                    tabBox.currentIndex = index
+                            }
                             
                             Accessible.name: model.caption
                             Accessible.role: Accessible.ListItem

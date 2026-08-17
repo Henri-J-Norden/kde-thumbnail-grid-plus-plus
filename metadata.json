@@ -7,7 +7,7 @@
                 "Name": "Antigravity"
             }
         ],
-        "Description": "Fast Thumbnail Grid based on Pie's engine (fixed thumbnail height for ultrawide displays)",
+        "Description": "Fast Thumbnail Grid based on Pie's engine (with hover selection and fixed thumbnail height for ultrawide displays)",
         "Icon": "preferences-system-windows-switcher-big-icons",
         "Id": "thumbnail_grid_plus",
         "License": "GPL",

@@ -12,6 +12,7 @@ import QtQuick.Effects
 import QtQuick.Layouts
 import QtCore
 import org.kde.plasma.core as PlasmaCore
+import org.kde.plasma.plasma5support as Plasma5Support
 import org.kde.ksvg as KSvg
 import org.kde.plasma.components 3.0 as PlasmaComponents3
 import org.kde.kwin as KWin
@@ -44,6 +45,7 @@ KWin.TabBoxSwitcher {
         property bool buttonPin: true
         property bool buttonKeepAbove: true
         property bool buttonClose: true
+        property bool buttonDebug: false
         property real buttonSize: 1.6
     }
 
@@ -53,6 +55,17 @@ KWin.TabBoxSwitcher {
     readonly property bool showPreview: isPreview || showSettings
     property bool showSettings: false
     property bool mouseNavActive: false
+
+    function dumpProperties(obj) {
+        var lines = []
+        for (var key in obj) {
+            var v = obj[key]
+            if (typeof v === "function")  // skip methods and signals
+                continue
+            lines.push(key + ": " + v)
+        }
+        return lines.join("\n")
+    }
 
     Window {
         id: wrapper
@@ -474,6 +487,23 @@ KWin.TabBoxSwitcher {
                                                 Layout.fillWidth: true
                                             }
 
+                                            // Debug Button
+                                            PlasmaComponents3.Button {
+                                                id: buttonDebug
+                                                visible: settings.buttonDebug && (isCurrent || hoverHandler.hovered || buttonDebug.hovered)
+                                                icon.name: "info-symbolic"
+                                                onClicked: {
+                                                    var text = dumpProperties(window)
+                                                    var cmd = "echo '" + text.replace(/'/g, "'\\''") + "' > /tmp/kwin_debug_window.txt && kdialog --textbox /tmp/kwin_debug_window.txt --title 'KWin: " + model.caption + "' --geometry 480x600"
+                                                    executableSource.connectSource(cmd)
+                                                }
+                                                background.opacity: settings.buttonOpacity
+                                                implicitWidth: buttonSize
+                                                implicitHeight: buttonSize
+                                                ToolTip.text: "Show window debug info"
+                                                ToolTip.visible: hovered
+                                            }
+
                                             // Minimize/Restore Button
                                             PlasmaComponents3.Button {
                                                 id: minRestoreButton
@@ -837,6 +867,11 @@ KWin.TabBoxSwitcher {
                         Layout.fillWidth: true
                         PlasmaComponents3.Label { text: "Window action buttons:" }
                         PlasmaComponents3.CheckBox {
+                            text: "Debug"
+                            checked: settings.buttonDebug
+                            onCheckedChanged: settings.buttonDebug = checked
+                        }
+                        PlasmaComponents3.CheckBox {
                             text: "Minimize/Restore"
                             checked: settings.buttonMinimize
                             onCheckedChanged: settings.buttonMinimize = checked
@@ -854,6 +889,15 @@ KWin.TabBoxSwitcher {
                     }
                 }
             }
+        }
+    }
+
+    Plasma5Support.DataSource {
+        id: executableSource
+        engine: "executable"
+        connectedSources: []
+        onNewData: {
+            executableSource.disconnectSource(sourceName)
         }
     }
 }

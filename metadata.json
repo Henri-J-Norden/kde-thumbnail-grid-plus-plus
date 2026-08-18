@@ -3,13 +3,17 @@
     "KPlugin": {
         "Authors": [
             {
+                "Email": "55378880+Henri-J-Norden@users.noreply.github.com",
+                "Name": "Henri J. Norden"
+            },
+            {
                 "Email": "antigravity@gemini.google.com",
                 "Name": "Antigravity"
             }
         ],
-        "Description": "Fast Thumbnail Grid based on Pie's engine (with hover selection and fixed thumbnail height for ultrawide displays)",
+        "Description": "Thumbnail Grid, but highly customizable and with more features.",
         "Icon": "preferences-system-windows-switcher-big-icons",
-        "Id": "thumbnail_grid_plus_plus7",
+        "Id": "thumbnail_grid_plus_plus",
         "License": "GPL",
         "Name": "Thumbnail Grid ++",
         "ServiceTypes": [

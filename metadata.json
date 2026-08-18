@@ -9,9 +9,9 @@
         ],
         "Description": "Fast Thumbnail Grid based on Pie's engine (with hover selection and fixed thumbnail height for ultrawide displays)",
         "Icon": "preferences-system-windows-switcher-big-icons",
-        "Id": "thumbnail_grid_plus",
+        "Id": "thumbnail_grid_plus_plus7",
         "License": "GPL",
-        "Name": "Thumbnail Grid +",
+        "Name": "Thumbnail Grid ++",
         "ServiceTypes": [
             "KWin/WindowSwitcher"
         ]

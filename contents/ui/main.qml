@@ -7,6 +7,8 @@
  */
 
 import QtQuick
+import QtQuick.Controls
+import QtQuick.Effects
 import QtQuick.Layouts
 import QtCore
 import org.kde.plasma.core as PlasmaCore
@@ -19,326 +21,554 @@ KWin.TabBoxSwitcher {
     id: tabBox
 
     Settings {
-        id: appSettings
+        id: settings
+        category: tabBox.isAlternative ? "Alt" : "Main"
         location: StandardPaths.writableLocation(StandardPaths.GenericConfigLocation) + "/kwin_thumbnail_grid_plus.ini"
         property bool hoverSelection: true
         property int thumbnailWidthGridUnits: 16
-        property string thumbnailHeightInput: "16:9"
-        property int iconSizeIndex: 5
+        property string thumbnailHeightInput: "16:10"
+        property int iconSizeIndex: 4
+        property real backgroundOpacity: 0.5
+        property real thumbnailOpacity: 1.0
+        property int previewRepeatCount: 1
+        property int maxWidth: 0
+        property bool minimizedItalics: true
+        property bool minimizedDesaturate: true
+        property bool minimizedBlur: true
+        property real buttonOpacity: 0.75
+        property bool buttonSettings: true
+        property bool buttonMaximize: true
+        property bool buttonFullscreen: true
+        property bool buttonNoBorder: true
+        property bool buttonMinimize: true
+        property bool buttonPin: true
+        property bool buttonKeepAbove: true
+        property bool buttonClose: true
+        property real buttonSize: 1.6
     }
 
+    readonly property real buttonSize: Kirigami.Units.gridUnit * settings.buttonSize
+    readonly property bool isAlternative: false  // tabBox.mode is undefined
     readonly property bool isPreview: tabBox.automaticallyHide === undefined
+    readonly property bool showPreview: isPreview || showSettings
+    property bool showSettings: false
+    property bool mouseNavActive: false
 
     Window {
-        id: wnd
+        id: wrapper
         visible: tabBox.visible
         flags: Qt.BypassWindowManagerHint | Qt.FramelessWindowHint
         color: "transparent"
+        width: tabBox.screenGeometry.width
+        height: tabBox.screenGeometry.height
 
-        // Center on screen logic
-        x: tabBox.screenGeometry.x + tabBox.screenGeometry.width * 0.5 - width * 0.5
-        y: tabBox.screenGeometry.y + tabBox.screenGeometry.height * 0.5 - height * 0.5
-        
-        // Main Item Container
-        FocusScope {
-            id: dialogMainItem
-            focus: true
+        MouseArea {
             anchors.fill: parent
+            onClicked: wrapper.close()
+        }
 
-            // Opaque backing to match original opaque look
-            Rectangle {
+        PlasmaComponents3.Button {
+            anchors.left: parent.left
+            anchors.bottom: parent.bottom
+            anchors.margins: Kirigami.Units.largeSpacing
+            icon.name: "configure-symbolic"
+            checkable: true
+            checked: tabBox.showSettings
+            onCheckedChanged: tabBox.showSettings = checked
+            visible: settings.buttonSettings
+        }
+
+        Item {
+            id: wnd
+            anchors.centerIn: parent
+            
+            // Main Item Container
+            FocusScope {
+                id: dialogMainItem
+                focus: true
                 anchors.fill: parent
-                // Resize slightly to avoid bleeding out of rounded corners if SVG radius is large
-                // But mostly standard radius is fine.
-                radius: 6 // common default
-                color: Kirigami.Theme.backgroundColor
-            }
 
-            // Background for the window (Using standard KSVG for themed look)
-            KSvg.FrameSvgItem {
-                anchors.fill: parent
-                imagePath: "dialogs/background"
-            }
+                // Opaque backing to match original opaque look
+                Rectangle {
+                    anchors.fill: parent
+                    // Resize slightly to avoid bleeding out of rounded corners if SVG radius is large
+                    // But mostly standard radius is fine.
+                    radius: 6 // common default
+                    color: Kirigami.Theme.backgroundColor
+                    opacity: settings.backgroundOpacity
+                }
 
-            //-- Configuration Constants --
-            readonly property var iconSizes: [0, Kirigami.Units.iconSizes.small, Kirigami.Units.iconSizes.smallMedium, Kirigami.Units.iconSizes.medium, Kirigami.Units.iconSizes.large, Kirigami.Units.iconSizes.huge, Kirigami.Units.iconSizes.enormous]
-            readonly property int iconSize: iconSizes[appSettings.iconSizeIndex] ?? Kirigami.Units.iconSizes.huge
-            readonly property int thumbnailWidth: Kirigami.Units.gridUnit * appSettings.thumbnailWidthGridUnits
-            readonly property int thumbnailHeight: {
-                const input = (appSettings.thumbnailHeightInput || "").trim();
+                // Background for the window (Using standard KSVG for themed look)
+                KSvg.FrameSvgItem {
+                    anchors.fill: parent
+                    imagePath: "dialogs/background"
+                    opacity: settings.backgroundOpacity
+                }
 
-                // Try aspect ratio "X:Y"
-                if (input.includes(":")) {
-                    const parts = input.split(":");
-                    if (parts.length === 2) {
-                        const x = parseFloat(parts[0]);
-                        const y = parseFloat(parts[1]);
-                        if (!isNaN(x) && !isNaN(y) && x > 0) {
-                            return Math.round(thumbnailWidth * (y / x));
+                //-- Configuration Constants --
+                readonly property var iconSizes: [0, Kirigami.Units.iconSizes.small, Kirigami.Units.iconSizes.smallMedium, Kirigami.Units.iconSizes.medium, Kirigami.Units.iconSizes.large, Kirigami.Units.iconSizes.huge, Kirigami.Units.iconSizes.enormous]
+                readonly property int iconSize: iconSizes[settings.iconSizeIndex] ?? Kirigami.Units.iconSizes.huge
+                readonly property int thumbnailWidth: Kirigami.Units.gridUnit * settings.thumbnailWidthGridUnits
+                readonly property int thumbnailHeight: {
+                    const input = (settings.thumbnailHeightInput || "").trim();
+
+                    // Try aspect ratio "X:Y"
+                    if (input.includes(":")) {
+                        const parts = input.split(":");
+                        if (parts.length === 2) {
+                            const x = parseFloat(parts[0]);
+                            const y = parseFloat(parts[1]);
+                            if (!isNaN(x) && !isNaN(y) && x > 0) {
+                                return Math.round(thumbnailWidth * (y / x));
+                            }
                         }
                     }
-                }
 
-                // Try plain positive number (gridUnits)
-                const num = parseFloat(input);
-                if (!isNaN(num) && num > 0) {
-                    return Math.round(Kirigami.Units.gridUnit * num);
-                }
+                    // Try plain positive number (gridUnits)
+                    const num = parseFloat(input);
+                    if (!isNaN(num) && num > 0) {
+                        return Math.round(Kirigami.Units.gridUnit * num);
+                    }
 
-                // Default: use screen geometry ratio
-                if (tabBox.screenGeometry.height > 0) {
-                    const screenFactor = tabBox.screenGeometry.width / tabBox.screenGeometry.height;
-                    return Math.round(thumbnailWidth * (1.0 / screenFactor));
+                    // Default: use screen geometry ratio
+                    if (tabBox.screenGeometry.height > 0) {
+                        const screenFactor = tabBox.screenGeometry.width / tabBox.screenGeometry.height;
+                        return Math.round(thumbnailWidth * (1.0 / screenFactor));
+                    }
+                    return Math.round(thumbnailWidth / 1.777); // Fallback 16:9
                 }
-                return Math.round(thumbnailWidth / 1.777); // Fallback 16:9
-            }
-            
-            readonly property int cellMargin: Kirigami.Units.largeSpacing
-            readonly property int cellWidth: thumbnailWidth + cellMargin * 2
-            readonly property int cellHeight: thumbnailHeight + iconSize + cellMargin * 2
+                
+                readonly property int cellMargin: Kirigami.Units.largeSpacing
+                readonly property int cellWidth: thumbnailWidth + cellMargin * 2
+                readonly property int cellHeight: thumbnailHeight + iconSize + cellMargin * 2
 
-            //-- Layout Logic --
-            // Calculate max dimensions
-            //-- Layout Logic --
-            // Calculate max dimensions
-            property int maxW: tabBox.screenGeometry.width * 0.9
-            property int maxH: tabBox.screenGeometry.height * 0.8
-            
-            // Greedy Algorithm from original Thumbnail Grid to balance rows/cols
-            function columnCountRecursion(prevC, prevBestC, prevDiff) {
-                const c = prevC - 1;
-                if (c < 1) return prevBestC;
+                //-- Layout Logic --
+                // Calculate max dimensions
+                //-- Layout Logic --
+                // Calculate max dimensions
+                property int maxW: Math.min((settings.maxWidth > 0 ? settings.maxWidth : Infinity), tabBox.screenGeometry.width) * 0.9
+                property int maxH: tabBox.screenGeometry.height * 0.8
+                
+                // Greedy Algorithm from original Thumbnail Grid to balance rows/cols
+                function columnCountRecursion(prevC, prevBestC, prevDiff) {
+                    const c = prevC - 1;
+                    if (c < 1) return prevBestC;
 
-                // don't increase vertical extent more than horizontal (keep landscape aspect)
-                // and don't exceed maxHeight
-                if (prevC * prevC <= itemCount + prevDiff ||
-                        maxH < Math.ceil(itemCount / c) * cellHeight) {
-                    return prevBestC;
-                }
-                const residue = itemCount % c;
-                // halts algorithm at some point
-                if (residue == 0) {
-                    return c;
-                }
-                // empty slots
-                const diff = c - residue;
+                    // don't increase vertical extent more than horizontal (keep landscape aspect)
+                    // and don't exceed maxHeight
+                    if (prevC * prevC <= itemCount + prevDiff ||
+                            maxH < Math.ceil(itemCount / c) * cellHeight) {
+                        return prevBestC;
+                    }
+                    const residue = itemCount % c;
+                    // halts algorithm at some point
+                    if (residue == 0) {
+                        return c;
+                    }
+                    // empty slots
+                    const diff = c - residue;
 
-                // compare it to previous count of empty slots
-                if (diff < prevDiff) {
-                    return columnCountRecursion(c, c, diff);
-                } else if (diff == prevDiff) {
-                    // when it's the same try again
+                    // compare it to previous count of empty slots
+                    if (diff < prevDiff) {
+                        return columnCountRecursion(c, c, diff);
+                    } else if (diff == prevDiff) {
+                        // when it's the same try again
+                        return columnCountRecursion(c, prevBestC, diff);
+                    }
+                    // when we've found a local minimum choose this one (greedy)
                     return columnCountRecursion(c, prevBestC, diff);
                 }
-                // when we've found a local minimum choose this one (greedy)
-                return columnCountRecursion(c, prevBestC, diff);
-            }
 
-            property int maxGridColumnsByWidth: Math.floor(maxW / cellWidth)
-            property int itemCount: repeater.count
+                property int maxGridColumnsByWidth: Math.floor(maxW / cellWidth)
+                property int itemCount: repeater.total_count
 
-            property int columns: {
-                if (itemCount === 0) return 1;
-                const c = Math.min(itemCount, maxGridColumnsByWidth);
-                if (c <= 1) return 1;
-                const residue = itemCount % c;
-                if (residue == 0) return c;
-                return columnCountRecursion(c, c, c - residue);
-            }
-            
-            // Calculate actual content dimensions
-            property int rows: Math.ceil(itemCount / Math.max(1, columns))
-            
-            // Ensure window has size when empty so PlaceholderMessage is visible
-            // Match original behavior: defaults to 1 cell size
-            property int contentWidth: itemCount === 0 ? cellWidth : columns * cellWidth
-            property int contentHeight: itemCount === 0 ? cellHeight : rows * cellHeight
-
-            // Window size tracking
-            // Since we are inside Window, we bind Window's size to this logic
-            Binding {
-                target: wnd
-                property: "width"
-                value: dialogMainItem.contentWidth
-            }
-             Binding {
-                target: wnd
-                property: "height"
-                value: dialogMainItem.contentHeight
-            }
-
-            //-- Navigation Logic --
-            function navigate(dir) {
-                let current = tabBox.currentIndex;
-                let next = current;
-                let cols = Math.min(itemCount, columns);
-
-                if (dir === Qt.Key_Right) {
-                    next = (current + 1) % itemCount;
-                } else if (dir === Qt.Key_Left) {
-                    next = (current - 1 + itemCount) % itemCount;
-                } else if (dir === Qt.Key_Down) {
-                    next = current + cols;
-                    if (next >= itemCount) next = next % cols; // Wrap to top
-                } else if (dir === Qt.Key_Up) {
-                    next = current - cols;
-                    if (next < 0) {
-                        next = itemCount - (itemCount % cols) + current; // Try bottom row
-                        if (next >= itemCount) next -= cols; // Adjust if empty slot
-                    }
+                property int columns: {
+                    if (itemCount === 0) return 1;
+                    const c = Math.min(itemCount, maxGridColumnsByWidth);
+                    if (c <= 1) return 1;
+                    const residue = itemCount % c;
+                    if (residue == 0) return c;
+                    return columnCountRecursion(c, c, c - residue);
                 }
                 
-                if (next !== current) {
-                    tabBox.currentIndex = next;
+                // Calculate actual content dimensions
+                property int rows: Math.ceil(itemCount / Math.max(1, columns))
+                
+                // Ensure window has size when empty so PlaceholderMessage is visible
+                // Match original behavior: defaults to 1 cell size
+                property int contentWidth: itemCount === 0 ? cellWidth : columns * cellWidth
+                property int contentHeight: itemCount === 0 ? cellHeight : rows * cellHeight
+
+                // Window size tracking
+                // Since we are inside Window, we bind Window's size to this logic
+                Binding {
+                    target: wnd
+                    property: "width"
+                    value: dialogMainItem.contentWidth
                 }
-            }
-
-            Keys.onPressed: (event) => {
-                if (event.key === Qt.Key_Left || event.key === Qt.Key_Right || 
-                    event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
-                    navigate(event.key);
+                Binding {
+                    target: wnd                        
+                    property: "height"
+                    value: dialogMainItem.contentHeight
                 }
-            }
 
-            property bool mouseNavActive: false
+                //-- Navigation Logic --
+                function navigate(dir) {
+                    let current = tabBox.currentIndex;
+                    let next = current;
+                    let cols = Math.min(itemCount, columns);
 
-            Timer {
-                id: armTimer
-                interval: Kirigami.Units.veryLongDuration
-                onTriggered: dialogMainItem.mouseNavActive = true
-            }
-
-            Connections {
-                target: tabBox
-                function onVisibleChanged() {
-                    dialogMainItem.mouseNavActive = false
-                    if (tabBox.visible) {
-                        armTimer.start()
+                    if (dir === Qt.Key_Right) {
+                        next = (current + 1) % itemCount;
+                    } else if (dir === Qt.Key_Left) {
+                        next = (current - 1 + itemCount) % itemCount;
+                    } else if (dir === Qt.Key_Down) {
+                        next = current + cols;
+                        if (next >= itemCount) next = next % cols; // Wrap to top
+                    } else if (dir === Qt.Key_Up) {
+                        next = current - cols;
+                        if (next < 0) {
+                            next = itemCount - (itemCount % cols) + current; // Try bottom row
+                            if (next >= itemCount) next -= cols; // Adjust if empty slot
+                        }
+                    }
+                    
+                    if (next !== current) {
+                        tabBox.currentIndex = next;
                     }
                 }
-            }
 
-            Flow {
-                id: flow
-                anchors.fill: parent
-                
-                Repeater {
-                    id: repeater
-                    model: tabBox.model
-                    delegate: Item {
-                        width: dialogMainItem.cellWidth
-                        height: dialogMainItem.cellHeight
-                        
-                        readonly property bool isCurrent: index === tabBox.currentIndex
+                Keys.onPressed: (event) => {
+                    if (event.key === Qt.Key_Left || event.key === Qt.Key_Right || 
+                        event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
+                        navigate(event.key);
+                    }
+                }
 
-                        //-- Background/Highlight --
-                        KSvg.FrameSvgItem {
-                            anchors.fill: parent
-                            imagePath: "widgets/viewitem"
-                            prefix: "hover"
-                            visible: isCurrent
+                Timer {
+                    id: armTimer
+                    interval: Kirigami.Units.veryLongDuration
+                    onTriggered: tabBox.mouseNavActive = true
+                }
+
+                Connections {
+                    target: tabBox
+                    function onVisibleChanged() {
+                        tabBox.mouseNavActive = false
+                        if (tabBox.visible) {
+                            armTimer.start()
                         }
+                    }
+                }
 
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: tabBox.model.activate(index)
-                            hoverEnabled: appSettings.hoverSelection
-                            onPositionChanged: {
-                                if (dialogMainItem.mouseNavActive)
-                                    tabBox.currentIndex = index
-                            }
-                            
-                            Accessible.name: model.caption
-                            Accessible.role: Accessible.ListItem
-                        }
+                Flow {
+                    id: flow
+                    anchors.fill: parent
+                    
+                    Repeater {
+                        id: repeater
+                        model: tabBox.showPreview ? settings.previewRepeatCount : 1
+                        readonly property int total_count: count * (repeater.itemAt(0)?.count ?? 0)
 
-                        //-- Content --
-                        ColumnLayout {
-                            anchors.fill: parent
-                            anchors.margins: dialogMainItem.cellMargin
-                            spacing: Kirigami.Units.smallSpacing
+                        delegate: Repeater {
+                            model: tabBox.model
 
-                            // Thumbnail Container
-                            Item {
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
+                            delegate: Item {
+                                width: dialogMainItem.cellWidth
+                                height: dialogMainItem.cellHeight
                                 
-                                // Live Window Thumbnail
-                                KWin.WindowThumbnail {
+                                readonly property bool isCurrent: index === tabBox.currentIndex
+
+                                readonly property var window: {
+                                    const windows = KWin.Workspace?.stackingOrder || [];
+                                    return windows.find(w => w.internalId === windowId) || null;
+                                }
+
+                                //-- Background/Highlight --
+                                KSvg.FrameSvgItem {
                                     anchors.fill: parent
-                                    wId: windowId 
+                                    imagePath: "widgets/viewitem"
+                                    prefix: "hover"
+                                    visible: isCurrent
                                 }
-                                
-                                // Close Button (replicate original positioning)
-                                PlasmaComponents3.ToolButton {
-                                    id: closeButton
-                                    anchors {
-                                        right: parent.right
-                                        top: parent.top
-                                        // Deliberately touch the inner edges of the frame (negate the padding)
-                                        rightMargin: -dialogMainItem.cellMargin + Kirigami.Units.smallSpacing
-                                        topMargin: -dialogMainItem.cellMargin + Kirigami.Units.smallSpacing
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: tabBox.model.activate(index)
+                                    hoverEnabled: settings.hoverSelection
+                                    onPositionChanged: {
+                                        if (tabBox.mouseNavActive)
+                                            tabBox.currentIndex = index
                                     }
-                                    visible: model.closeable && (isCurrent || hoverHandler.hovered || closeButton.hovered)
-                                    icon.name: "window-close-symbolic"
-                                    onClicked: tabBox.model.close(index)
-                                }
-                                
-                                HoverHandler {
-                                    id: hoverHandler
+                                    
+                                    Accessible.name: model.caption
+                                    Accessible.role: Accessible.ListItem
                                 }
 
-                                // Application Icon Overlay
-                                Kirigami.Icon {
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    anchors.bottom: parent.bottom
-                                    anchors.bottomMargin: -height/2 
-                                    width: dialogMainItem.iconSize
-                                    height: width
-                                    source: model.icon
+                                //-- Content --
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: dialogMainItem.cellMargin
+                                    spacing: Kirigami.Units.smallSpacing
+
+                                    // Thumbnail Container
+                                    Item {
+                                        Layout.fillWidth: true
+                                        Layout.fillHeight: true
+                                        
+                                        // Live Window Thumbnail
+                                        KWin.WindowThumbnail {
+                                            anchors.fill: parent
+                                            wId: windowId
+                                            opacity: settings.thumbnailOpacity
+                                            layer.enabled: window.minimized && !isCurrent && (settings.minimizedDesaturate || settings.minimizedBlur)
+                                            layer.effect: MultiEffect {
+                                                saturation: settings.minimizedDesaturate ? -1.0 : 0.0
+                                                blurEnabled: settings.minimizedBlur
+                                                blurMax: 32
+                                                blur: 1.0
+                                            }
+                                        }
+
+                                        // Window Management Buttons
+                                        RowLayout {
+                                            anchors {
+                                                left: parent.left
+                                                right: parent.right
+                                                top: parent.top
+                                                leftMargin: -dialogMainItem.cellMargin + Kirigami.Units.smallSpacing
+                                                rightMargin: -dialogMainItem.cellMargin + Kirigami.Units.smallSpacing
+                                                topMargin: -dialogMainItem.cellMargin + Kirigami.Units.smallSpacing
+                                            }
+                                            spacing: Kirigami.Units.smallSpacing
+
+                                            // Pin to All Desktops Button
+                                            Loader {
+                                                id: buttonPin
+                                                visible: settings.buttonPin && (window?.onAllDesktops || isCurrent || hoverHandler.hovered || (buttonPin.item ? buttonPin.item.hovered : false))
+                                                sourceComponent: window?.onAllDesktops ? buttonPinTrue : buttonPinFalse
+
+                                                Component {
+                                                    id: buttonPinTrue
+                                                    PlasmaComponents3.RoundButton {
+                                                        icon.name: "window-pin-symbolic"
+                                                        onClicked: window.onAllDesktops = !window.onAllDesktops
+                                                        implicitWidth: buttonSize
+                                                        implicitHeight: buttonSize
+                                                        ToolTip.text: window?.onAllDesktops ? "Unpin from all desktops" : "Pin to all desktops"
+                                                        ToolTip.visible: hovered
+                                                    }
+                                                }
+
+                                                Component {
+                                                    id: buttonPinFalse
+                                                    PlasmaComponents3.Button {
+                                                        icon.name: "window-pin-symbolic"
+                                                        onClicked: window.onAllDesktops = !window.onAllDesktops
+                                                        background.opacity: settings.buttonOpacity
+                                                        implicitWidth: buttonSize
+                                                        implicitHeight: buttonSize
+                                                        ToolTip.text: "Pin to all desktops"
+                                                        ToolTip.visible: hovered
+                                                    }
+                                                }
+                                            }
+
+                                            // Keep Above Button
+                                            Loader {
+                                                id: buttonKeepAbove
+                                                visible: settings.buttonKeepAbove && (window?.keepAbove || isCurrent || hoverHandler.hovered || (buttonKeepAbove.item ? buttonKeepAbove.item.hovered : false))
+                                                sourceComponent: window?.keepAbove ? buttonKeepAboveTrue : buttonKeepAboveFalse
+
+                                                Component {
+                                                    id: buttonKeepAboveTrue
+                                                    PlasmaComponents3.RoundButton {
+                                                        icon.name: "window-keep-above-symbolic"
+                                                        onClicked: window.keepAbove = !window.keepAbove
+                                                        implicitWidth: buttonSize
+                                                        implicitHeight: buttonSize
+                                                        ToolTip.text: window?.keepAbove ? "Remove keep above" : "Keep above"
+                                                        ToolTip.visible: hovered
+                                                    }
+                                                }
+
+                                                Component {
+                                                    id: buttonKeepAboveFalse
+                                                    PlasmaComponents3.Button {
+                                                        icon.name: "window-keep-above-symbolic"
+                                                        onClicked: window.keepAbove = !window.keepAbove
+                                                        background.opacity: settings.buttonOpacity
+                                                        implicitWidth: buttonSize
+                                                        implicitHeight: buttonSize
+                                                        ToolTip.text: "Keep above"
+                                                        ToolTip.visible: hovered
+                                                    }
+                                                }
+                                            }
+
+                                            // Fullscreen Button
+                                            Loader {
+                                                id: buttonFullscreen
+                                                visible: settings.buttonFullscreen && (window?.fullScreen || isCurrent || hoverHandler.hovered || (buttonFullscreen.item ? buttonFullscreen.item.hovered : false))
+                                                sourceComponent: window?.fullScreen ? buttonFullscreenTrue : buttonFullscreenFalse
+
+                                                Component {
+                                                    id: buttonFullscreenTrue
+                                                    PlasmaComponents3.RoundButton {
+                                                        icon.name: "view-fullscreen-symbolic"
+                                                        onClicked: window.fullScreen = !window.fullScreen
+                                                        implicitWidth: buttonSize
+                                                        implicitHeight: buttonSize
+                                                        ToolTip.text: window?.fullScreen ? "Exit fullscreen" : "Fullscreen"
+                                                        ToolTip.visible: hovered
+                                                    }
+                                                }
+
+                                                Component {
+                                                    id: buttonFullscreenFalse
+                                                    PlasmaComponents3.Button {
+                                                        icon.name: "view-fullscreen-symbolic"
+                                                        onClicked: window.fullScreen = !window.fullScreen
+                                                        background.opacity: settings.buttonOpacity
+                                                        implicitWidth: buttonSize
+                                                        implicitHeight: buttonSize
+                                                        ToolTip.text: "Fullscreen"
+                                                        ToolTip.visible: hovered
+                                                    }
+                                                }
+                                            }
+
+                                            // No Border Button
+                                            Loader {
+                                                id: buttonNoBorder
+                                                visible: settings.buttonNoBorder && (window?.noBorder || isCurrent || hoverHandler.hovered || (buttonNoBorder.item ? buttonNoBorder.item.hovered : false))
+                                                sourceComponent: window?.noBorder ? buttonNoBorderTrue : buttonNoBorderFalse
+
+                                                Component {
+                                                    id: buttonNoBorderTrue
+                                                    PlasmaComponents3.RoundButton {
+                                                        icon.name: "window-decorations-symbolic"
+                                                        onClicked: window.noBorder = !window.noBorder
+                                                        implicitWidth: buttonSize
+                                                        implicitHeight: buttonSize
+                                                        ToolTip.text: window?.noBorder ? "Show titlebar & frame" : "No titlebar & frame"
+                                                        ToolTip.visible: hovered
+                                                    }
+                                                }
+
+                                                Component {
+                                                    id: buttonNoBorderFalse
+                                                    PlasmaComponents3.Button {
+                                                        icon.name: "window-decorations-symbolic"
+                                                        onClicked: window.noBorder = !window.noBorder
+                                                        background.opacity: settings.buttonOpacity
+                                                        implicitWidth: buttonSize
+                                                        implicitHeight: buttonSize
+                                                        ToolTip.text: "No titlebar & frame"
+                                                        ToolTip.visible: hovered
+                                                    }
+                                                }
+                                            }
+
+                                            Item {
+                                                Layout.fillWidth: true
+                                            }
+
+                                            // Minimize/Restore Button
+                                            PlasmaComponents3.Button {
+                                                id: minRestoreButton
+                                                visible: settings.buttonMinimize && (isCurrent || hoverHandler.hovered || minRestoreButton.hovered)
+                                                icon.name: window?.minimized ? "window-restore-symbolic" : "window-minimize-symbolic"
+                                                onClicked: window.minimized = !window.minimized
+                                                background.opacity: settings.buttonOpacity
+                                                implicitWidth: buttonSize
+                                                implicitHeight: buttonSize
+                                                ToolTip.text: window?.minimized ? "Restore" : "Minimize"
+                                                ToolTip.visible: hovered
+                                            }
+
+                                            // Maximize/Restore Button
+                                            PlasmaComponents3.Button {
+                                                id: buttonMaximize
+                                                visible: settings.buttonMaximize && (isCurrent || hoverHandler.hovered || buttonMaximize.hovered)
+                                                icon.name: window?.maximized ? "window-restore-symbolic" : "window-maximize-symbolic"
+                                                onClicked: window.maximized = !window.maximized
+                                                background.opacity: settings.buttonOpacity
+                                                implicitWidth: buttonSize
+                                                implicitHeight: buttonSize
+                                                ToolTip.text: window?.maximized ? "Restore" : "Maximize"
+                                                ToolTip.visible: hovered
+                                            }
+
+                                            // Close Button
+                                            PlasmaComponents3.Button {
+                                                id: buttonClose
+                                                visible: settings.buttonClose && model.closeable && (isCurrent || hoverHandler.hovered || buttonClose.hovered)
+                                                icon.name: "window-close-symbolic"
+                                                onClicked: tabBox.model.close(index)
+                                                background.opacity: settings.buttonOpacity
+                                                implicitWidth: buttonSize
+                                                implicitHeight: buttonSize
+                                                ToolTip.text: "Close"
+                                                ToolTip.visible: hovered
+                                            }
+                                        }
+
+                                        HoverHandler {
+                                            id: hoverHandler
+                                        }
+
+                                        // Application Icon Overlay
+                                        Kirigami.Icon {
+                                            anchors.horizontalCenter: parent.horizontalCenter
+                                            anchors.bottom: parent.bottom
+                                            anchors.bottomMargin: -height/2 
+                                            width: dialogMainItem.iconSize
+                                            height: width
+                                            source: model.icon
+                                            opacity: settings.thumbnailOpacity
+                                        }
+                                    }
+
+                                    // Spacing for the overlapping icon
+                                    Item { 
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: dialogMainItem.iconSize/2 
+                                    }
+
+                                    // Caption
+                                    PlasmaComponents3.Label {
+                                        Layout.fillWidth: true
+                                        text: model.caption
+                                        horizontalAlignment: Text.AlignHCenter
+                                        elide: Text.ElideMiddle
+                                        maximumLineCount: 1
+                                        font.weight: isCurrent ? Font.Bold : Font.Normal
+                                        font.italic: window.minimized && settings.minimizedItalics
+                                        // color: "white" // Removed to use theme default
+                                    }
                                 }
-                            }
-
-                            // Spacing for the overlapping icon
-                            Item { 
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: dialogMainItem.iconSize/2 
-                            }
-
-                            // Caption
-                            PlasmaComponents3.Label {
-                                Layout.fillWidth: true
-                                text: model.caption
-                                horizontalAlignment: Text.AlignHCenter
-                                elide: Text.ElideMiddle
-                                maximumLineCount: 1
-                                font.weight: isCurrent ? Font.Bold : Font.Normal
-                                // color: "white" // Removed to use theme default
                             }
                         }
                     }
-                }
-            } // Flow
+                } // Flow
 
-            Kirigami.PlaceholderMessage {
-                anchors.centerIn: parent
-                width: parent.width - Kirigami.Units.largeSpacing * 2
-                icon.source: "edit-none"
-                text: "No open windows"
-                visible: repeater.count === 0
+                Kirigami.PlaceholderMessage {
+                    anchors.centerIn: parent
+                    width: parent.width - Kirigami.Units.largeSpacing * 2
+                    icon.source: "edit-none"
+                    text: "No open windows"
+                    visible: repeater.total_count === 0
+                }
             }
         }
-    
-        Window {
-            id: settingsWnd
-            visible: tabBox.isPreview
-            flags: Qt.Tool
-            color: "transparent"
-            title: "Settings: Thumbnail Grid +"
-            onClosing: wnd.close()
 
-            x: tabBox.screenGeometry.x + tabBox.screenGeometry.width * 0.5 - width * 0.5
-            y: tabBox.screenGeometry.y
+        Item {
+            id: settingsWnd
+            visible: tabBox.showPreview
+
+            y: 0
+            anchors.horizontalCenter: parent.horizontalCenter
             width: settingsItem.implicitWidth
             height: settingsItem.implicitHeight
 
@@ -352,6 +582,10 @@ KWin.TabBoxSwitcher {
                     color: Kirigami.Theme.backgroundColor
                 }
 
+                MouseArea {
+                    anchors.fill: parent
+                }
+
                 ColumnLayout {
                     id: settingsContent
                     anchors.fill: parent
@@ -360,6 +594,8 @@ KWin.TabBoxSwitcher {
 
                     PlasmaComponents3.Label {
                         text: "NB: Restart KWin (log out and log in again) to apply settings to the real task switcher."
+                        font.bold: true
+                        visible: tabBox.isPreview
                         Layout.fillWidth: true
                         wrapMode: Text.Wrap
                     }
@@ -373,7 +609,7 @@ KWin.TabBoxSwitcher {
                             color: Kirigami.Theme.disabledTextColor
                         }
                         PlasmaComponents3.TextField {
-                            text: appSettings.location
+                            text: settings.location
                             font.family: "monospace"
                             font.italic: true
                             font.pointSize: Kirigami.Theme.smallFont.pointSize
@@ -381,16 +617,92 @@ KWin.TabBoxSwitcher {
                             readOnly: true
                             Layout.fillWidth: true
                         }
+                        PlasmaComponents3.TextField {
+                            text: settings.category
+                            font.family: "monospace"
+                            font.italic: true
+                            font.pointSize: Kirigami.Theme.smallFont.pointSize
+                            color: Kirigami.Theme.disabledTextColor
+                            readOnly: true
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        PlasmaComponents3.Label { text: "Preview repeat count:"; font.italic: true }
+                        PlasmaComponents3.Slider {
+                            from: 1
+                            to: 30
+                            value: settings.previewRepeatCount
+                            stepSize: 1
+                            onMoved: settings.previewRepeatCount = Math.round(value)
+                            Layout.fillWidth: true
+                        }
+                        PlasmaComponents3.Label {
+                            text: settings.previewRepeatCount
+                            Layout.preferredWidth: Kirigami.Units.gridUnit * 3
+                            horizontalAlignment: Text.AlignRight
+                        }
                     }
 
                     Kirigami.Separator {
                         Layout.fillWidth: true
                     }
 
-                    PlasmaComponents3.CheckBox {
-                        text: "Hover selection"
-                        checked: appSettings.hoverSelection
-                        onCheckedChanged: appSettings.hoverSelection = checked
+                    RowLayout {
+                        Layout.fillWidth: true
+                        PlasmaComponents3.CheckBox {
+                            text: "Select with mouse hover"
+                            checked: settings.hoverSelection
+                            onCheckedChanged: settings.hoverSelection = checked
+                        }
+                        Item { Layout.fillWidth: true }
+                        PlasmaComponents3.CheckBox {
+                            text: "Settings button"
+                            checked: settings.buttonSettings
+                            onCheckedChanged: settings.buttonSettings = checked
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        PlasmaComponents3.Label { text: "Max width:" }
+                        PlasmaComponents3.Slider {
+                            id: maxWidthSlider
+                            from: 0
+                            to: tabBox.screenGeometry.width
+                            value: Math.min(settings.maxWidth, tabBox.screenGeometry.width)
+                            stepSize: 1
+                            onMoved: settings.maxWidth = Math.round(value)
+                            Layout.fillWidth: true
+                        }
+                        PlasmaComponents3.SpinBox {
+                            from: 0
+                            to: 99999
+                            value: settings.maxWidth
+                            onValueModified: settings.maxWidth = value
+                        }
+                        PlasmaComponents3.Label { text: "px" }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        PlasmaComponents3.Label { text: "Minimized windows:" }
+                        PlasmaComponents3.CheckBox {
+                            text: "Italics text"
+                            checked: settings.minimizedItalics
+                            onCheckedChanged: settings.minimizedItalics = checked
+                        }
+                        PlasmaComponents3.CheckBox {
+                            text: "Desaturate thumbnail"
+                            checked: settings.minimizedDesaturate
+                            onCheckedChanged: settings.minimizedDesaturate = checked
+                        }
+                        PlasmaComponents3.CheckBox {
+                            text: "Blur thumbnail"
+                            checked: settings.minimizedBlur
+                            onCheckedChanged: settings.minimizedBlur = checked
+                        }
                     }
 
                     RowLayout {
@@ -399,18 +711,25 @@ KWin.TabBoxSwitcher {
                         PlasmaComponents3.SpinBox {
                             from: 8
                             to: 32
-                            value: appSettings.thumbnailWidthGridUnits
-                            onValueModified: appSettings.thumbnailWidthGridUnits = value
+                            value: settings.thumbnailWidthGridUnits
+                            onValueModified: settings.thumbnailWidthGridUnits = value
                         }
                         PlasmaComponents3.Label { text: "grid units" }
+                        Item { Layout.fillWidth: true }
+                        PlasmaComponents3.Label { text: "Icon size:" }
+                        PlasmaComponents3.ComboBox {
+                            model: ["None", "Small", "Small-Medium", "Medium", "Large", "Huge", "Enormous"]
+                            currentIndex: settings.iconSizeIndex
+                            onActivated: settings.iconSizeIndex = currentIndex
+                        }
                     }
 
                     RowLayout {
                         Layout.fillWidth: true
                         PlasmaComponents3.Label { text: "Thumbnail height:" }
                         PlasmaComponents3.TextField {
-                            text: appSettings.thumbnailHeightInput
-                            onTextEdited: appSettings.thumbnailHeightInput = text
+                            text: settings.thumbnailHeightInput
+                            onTextEdited: settings.thumbnailHeightInput = text
                         }
                         PlasmaComponents3.Label {
                             text: "e.g. 9 (grid units), 16:9 (aspect ratio), or blank for screen ratio"
@@ -420,11 +739,117 @@ KWin.TabBoxSwitcher {
 
                     RowLayout {
                         Layout.fillWidth: true
-                        PlasmaComponents3.Label { text: "Icon size:" }
-                        PlasmaComponents3.ComboBox {
-                            model: ["None", "Small", "Small-Medium", "Medium", "Large", "Huge", "Enormous"]
-                            currentIndex: appSettings.iconSizeIndex
-                            onActivated: appSettings.iconSizeIndex = currentIndex
+                        PlasmaComponents3.Label { text: "Thumbnail opacity:" }
+                        PlasmaComponents3.Slider {
+                            from: 0.0
+                            to: 1.0
+                            value: settings.thumbnailOpacity
+                            stepSize: 0.01
+                            onMoved: settings.thumbnailOpacity = value
+                            Layout.fillWidth: true
+                        }
+                        PlasmaComponents3.Label {
+                            text: Math.round(settings.thumbnailOpacity * 100) + "%"
+                            Layout.preferredWidth: Kirigami.Units.gridUnit * 3
+                            horizontalAlignment: Text.AlignRight
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        PlasmaComponents3.Label { text: "Background opacity:" }
+                        PlasmaComponents3.Slider {
+                            from: 0.0
+                            to: 1.0
+                            value: settings.backgroundOpacity
+                            stepSize: 0.01
+                            onMoved: settings.backgroundOpacity = value
+                            Layout.fillWidth: true
+                        }
+                        PlasmaComponents3.Label {
+                            text: Math.round(settings.backgroundOpacity * 100) + "%"
+                            Layout.preferredWidth: Kirigami.Units.gridUnit * 3
+                            horizontalAlignment: Text.AlignRight
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        PlasmaComponents3.Label { text: "Window button opacity:" }
+                        PlasmaComponents3.Slider {
+                            from: 0.0
+                            to: 1.0
+                            value: settings.buttonOpacity
+                            stepSize: 0.01
+                            onMoved: settings.buttonOpacity = value
+                            Layout.fillWidth: true
+                        }
+                        PlasmaComponents3.Label {
+                            text: Math.round(settings.buttonOpacity * 100) + "%"
+                            Layout.preferredWidth: Kirigami.Units.gridUnit * 3
+                            horizontalAlignment: Text.AlignRight
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        PlasmaComponents3.Label { text: "Window button size:" }
+                        PlasmaComponents3.Slider {
+                            from: 0.5
+                            to: 4.0
+                            value: settings.buttonSize
+                            stepSize: 0.1
+                            onMoved: settings.buttonSize = value
+                            Layout.fillWidth: true
+                        }
+                        PlasmaComponents3.Label {
+                            text: settings.buttonSize.toFixed(1) + "× grid unit"
+                            horizontalAlignment: Text.AlignRight
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        PlasmaComponents3.Label { text: "Window status buttons:" }
+                        PlasmaComponents3.CheckBox {
+                            text: "Pin to all desktops"
+                            checked: settings.buttonPin
+                            onCheckedChanged: settings.buttonPin = checked
+                        }
+                        PlasmaComponents3.CheckBox {
+                            text: "Keep above"
+                            checked: settings.buttonKeepAbove
+                            onCheckedChanged: settings.buttonKeepAbove = checked
+                        }
+                        PlasmaComponents3.CheckBox {
+                            text: "Fullscreen"
+                            checked: settings.buttonFullscreen
+                            onCheckedChanged: settings.buttonFullscreen = checked
+                        }
+                        PlasmaComponents3.CheckBox {
+                            text: "No titlebar/frame"
+                            checked: settings.buttonNoBorder
+                            onCheckedChanged: settings.buttonNoBorder = checked
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        PlasmaComponents3.Label { text: "Window action buttons:" }
+                        PlasmaComponents3.CheckBox {
+                            text: "Minimize/Restore"
+                            checked: settings.buttonMinimize
+                            onCheckedChanged: settings.buttonMinimize = checked
+                        }
+                        PlasmaComponents3.CheckBox {
+                            text: "Maximize/Restore"
+                            checked: settings.buttonMaximize
+                            onCheckedChanged: settings.buttonMaximize = checked
+                        }
+                        PlasmaComponents3.CheckBox {
+                            text: "Close"
+                            checked: settings.buttonClose
+                            onCheckedChanged: settings.buttonClose = checked
                         }
                     }
                 }

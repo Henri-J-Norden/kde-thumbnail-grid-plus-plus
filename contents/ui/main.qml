@@ -21,6 +21,8 @@ import org.kde.kirigami as Kirigami
 KWin.TabBoxSwitcher {
     id: tabBox
 
+    property int pendingIndex: -1
+
     Settings {
         id: settings
         category: tabBox.isAlternative ? "Alt" : "Main"
@@ -54,7 +56,14 @@ KWin.TabBoxSwitcher {
     readonly property bool isPreview: tabBox.automaticallyHide === undefined
     readonly property bool showPreview: isPreview || showSettings
     property bool showSettings: false
-    property bool mouseNavActive: false
+    property bool animationFinished: false
+
+    onShowPreviewChanged: {
+        if (showPreview)
+            settingsWnd.forceActiveFocus()
+        else
+            dialogMainItem.forceActiveFocus()
+    }
 
     function dumpProperties(obj) {
         var lines = []
@@ -77,7 +86,7 @@ KWin.TabBoxSwitcher {
 
         MouseArea {
             anchors.fill: parent
-            onClicked: wrapper.close()
+            onClicked: tabBox.model.activate(0)
         }
 
         PlasmaComponents3.Button {
@@ -88,7 +97,7 @@ KWin.TabBoxSwitcher {
             checkable: true
             checked: tabBox.showSettings
             onCheckedChanged: tabBox.showSettings = checked
-            visible: settings.buttonSettings
+            visible: settings.buttonSettings && tabBox.animationFinished
         }
 
         Item {
@@ -248,26 +257,66 @@ KWin.TabBoxSwitcher {
                     
                     if (next !== current) {
                         tabBox.currentIndex = next;
+                        return true;
                     }
+                    return false;
+                }
+
+
+                // ClientModel role IDs from clientmodel.h enum
+                // CaptionRole = Qt::UserRole + 1, WIdRole = Qt::UserRole + 5
+                readonly property int captionRole: Qt.UserRole + 1
+                readonly property int windowIdRole: Qt.UserRole + 5
+
+                function handleSpecialKeys(key) {
+                    const idx = tabBox.model.index(tabBox.currentIndex, 0)
+                    const wid = tabBox.model.data(idx, windowIdRole)
+                    const window = (KWin.Workspace?.stackingOrder || []).find(w => w.internalId === wid)
+
+                    if (key === Qt.Key_Delete) {
+                        if (tabBox.pendingIndex < 0) {
+                            tabBox.pendingIndex = tabBox.currentIndex
+                            tabBox.model.close(tabBox.currentIndex)
+                        }
+                    } else if (key === Qt.Key_PageUp) {
+                        if (window) { const isMax = window.frameGeometry.width >= tabBox.screenGeometry.width - 1; window.setMaximize(!isMax, !isMax) }
+                    } else if (key === Qt.Key_PageDown) {
+                        if (window) window.minimized = !window.minimized;
+                    } else if (key === Qt.Key_F) {
+                        if (window) window.fullScreen = !window.fullScreen
+                    } else if (key === Qt.Key_T) {
+                        if (window) window.noBorder = !window.noBorder
+                    } else if (key === Qt.Key_A) {
+                        if (window) window.keepAbove = !window.keepAbove
+                    } else if (key === Qt.Key_B) {
+                        if (window) window.keepBelow = !window.keepBelow
+                    } else if (key === Qt.Key_D) {
+                        if (window) window.onAllDesktops = !window.onAllDesktops
+                    } else if (key === Qt.Key_F12) {
+                        var caption = tabBox.model.data(idx, captionRole)
+                        executableSource.showDebugInfo(window, caption)
+                    } else {
+                        return false;
+                    }
+                    return true;
                 }
 
                 Keys.onPressed: (event) => {
-                    if (event.key === Qt.Key_Left || event.key === Qt.Key_Right || 
-                        event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
-                        navigate(event.key);
-                    }
+                    if (navigate(event.key)) { event.accepted = true; return; }
+                    if (handleSpecialKeys(event.key)) { event.accepted = true; return; }
                 }
+
 
                 Timer {
                     id: armTimer
                     interval: Kirigami.Units.veryLongDuration
-                    onTriggered: tabBox.mouseNavActive = true
+                    onTriggered: tabBox.animationFinished = true
                 }
 
                 Connections {
                     target: tabBox
                     function onVisibleChanged() {
-                        tabBox.mouseNavActive = false
+                        tabBox.animationFinished = false
                         if (tabBox.visible) {
                             armTimer.start()
                         }
@@ -285,6 +334,15 @@ KWin.TabBoxSwitcher {
 
                         delegate: Repeater {
                             model: tabBox.model
+                            onItemRemoved: (index, item) => {
+                                if (tabBox.pendingIndex >= 0) {
+                                    const restore = tabBox.pendingIndex
+                                    Qt.callLater(() => {
+                                        tabBox.currentIndex = Math.min(restore, tabBox.model.rowCount() - 1)
+                                        tabBox.pendingIndex = -1
+                                    })
+                                }
+                            }
 
                             delegate: Item {
                                 width: dialogMainItem.cellWidth
@@ -296,6 +354,9 @@ KWin.TabBoxSwitcher {
                                     const windows = KWin.Workspace?.stackingOrder || [];
                                     return windows.find(w => w.internalId === windowId) || null;
                                 }
+
+                                readonly property bool isMaximized: window ?
+                                    (window.frameGeometry.width >= tabBox.screenGeometry.width - 1) : false
 
                                 //-- Background/Highlight --
                                 KSvg.FrameSvgItem {
@@ -310,7 +371,7 @@ KWin.TabBoxSwitcher {
                                     onClicked: tabBox.model.activate(index)
                                     hoverEnabled: settings.hoverSelection
                                     onPositionChanged: {
-                                        if (tabBox.mouseNavActive)
+                                        if (tabBox.animationFinished)
                                             tabBox.currentIndex = index
                                     }
                                     
@@ -368,10 +429,10 @@ KWin.TabBoxSwitcher {
                                                         onClicked: window.onAllDesktops = !window.onAllDesktops
                                                         implicitWidth: buttonSize
                                                         implicitHeight: buttonSize
-                                                        ToolTip.text: window?.onAllDesktops ? "Unpin from all desktops" : "Pin to all desktops"
+                                                        ToolTip.text: "Unpin from all desktops [D]"
                                                         ToolTip.visible: hovered
+                                                        }
                                                     }
-                                                }
 
                                                 Component {
                                                     id: buttonPinFalse
@@ -381,7 +442,7 @@ KWin.TabBoxSwitcher {
                                                         background.opacity: settings.buttonOpacity
                                                         implicitWidth: buttonSize
                                                         implicitHeight: buttonSize
-                                                        ToolTip.text: "Pin to all desktops"
+                                                        ToolTip.text: "Pin to all desktops [D]"
                                                         ToolTip.visible: hovered
                                                     }
                                                 }
@@ -400,7 +461,7 @@ KWin.TabBoxSwitcher {
                                                         onClicked: window.keepAbove = !window.keepAbove
                                                         implicitWidth: buttonSize
                                                         implicitHeight: buttonSize
-                                                        ToolTip.text: window?.keepAbove ? "Remove keep above" : "Keep above"
+                                                        ToolTip.text: "Remove keep above [A]"
                                                         ToolTip.visible: hovered
                                                     }
                                                 }
@@ -413,7 +474,7 @@ KWin.TabBoxSwitcher {
                                                         background.opacity: settings.buttonOpacity
                                                         implicitWidth: buttonSize
                                                         implicitHeight: buttonSize
-                                                        ToolTip.text: "Keep above"
+                                                        ToolTip.text: "Keep above [A]"
                                                         ToolTip.visible: hovered
                                                     }
                                                 }
@@ -432,7 +493,7 @@ KWin.TabBoxSwitcher {
                                                         onClicked: window.fullScreen = !window.fullScreen
                                                         implicitWidth: buttonSize
                                                         implicitHeight: buttonSize
-                                                        ToolTip.text: window?.fullScreen ? "Exit fullscreen" : "Fullscreen"
+                                                        ToolTip.text: "Exit fullscreen [F]"
                                                         ToolTip.visible: hovered
                                                     }
                                                 }
@@ -445,7 +506,7 @@ KWin.TabBoxSwitcher {
                                                         background.opacity: settings.buttonOpacity
                                                         implicitWidth: buttonSize
                                                         implicitHeight: buttonSize
-                                                        ToolTip.text: "Fullscreen"
+                                                        ToolTip.text: "Fullscreen [F]"
                                                         ToolTip.visible: hovered
                                                     }
                                                 }
@@ -464,7 +525,7 @@ KWin.TabBoxSwitcher {
                                                         onClicked: window.noBorder = !window.noBorder
                                                         implicitWidth: buttonSize
                                                         implicitHeight: buttonSize
-                                                        ToolTip.text: window?.noBorder ? "Show titlebar & frame" : "No titlebar & frame"
+                                                        ToolTip.text: "Show titlebar & frame [T]"
                                                         ToolTip.visible: hovered
                                                     }
                                                 }
@@ -477,7 +538,7 @@ KWin.TabBoxSwitcher {
                                                         background.opacity: settings.buttonOpacity
                                                         implicitWidth: buttonSize
                                                         implicitHeight: buttonSize
-                                                        ToolTip.text: "No titlebar & frame"
+                                                        ToolTip.text: "Hide titlebar & frame [T]"
                                                         ToolTip.visible: hovered
                                                     }
                                                 }
@@ -492,15 +553,11 @@ KWin.TabBoxSwitcher {
                                                 id: buttonDebug
                                                 visible: settings.buttonDebug && (isCurrent || hoverHandler.hovered || buttonDebug.hovered)
                                                 icon.name: "info-symbolic"
-                                                onClicked: {
-                                                    var text = dumpProperties(window)
-                                                    var cmd = "echo '" + text.replace(/'/g, "'\\''") + "' > /tmp/kwin_debug_window.txt && kdialog --textbox /tmp/kwin_debug_window.txt --title 'KWin: " + model.caption + "' --geometry 480x600"
-                                                    executableSource.connectSource(cmd)
-                                                }
+                                                onClicked: executableSource.showDebugInfo(window, model.caption)
                                                 background.opacity: settings.buttonOpacity
                                                 implicitWidth: buttonSize
                                                 implicitHeight: buttonSize
-                                                ToolTip.text: "Show window debug info"
+                                                ToolTip.text: "Show window debug info [F12]"
                                                 ToolTip.visible: hovered
                                             }
 
@@ -513,7 +570,7 @@ KWin.TabBoxSwitcher {
                                                 background.opacity: settings.buttonOpacity
                                                 implicitWidth: buttonSize
                                                 implicitHeight: buttonSize
-                                                ToolTip.text: window?.minimized ? "Restore" : "Minimize"
+                                                ToolTip.text: window?.minimized ? "Restore [PgDn]" : "Minimize [PgDn]"
                                                 ToolTip.visible: hovered
                                             }
 
@@ -521,12 +578,14 @@ KWin.TabBoxSwitcher {
                                             PlasmaComponents3.Button {
                                                 id: buttonMaximize
                                                 visible: settings.buttonMaximize && (isCurrent || hoverHandler.hovered || buttonMaximize.hovered)
-                                                icon.name: window?.maximized ? "window-restore-symbolic" : "window-maximize-symbolic"
-                                                onClicked: window.maximized = !window.maximized
+                                                icon.name: isMaximized ? "window-restore-symbolic" : "window-maximize-symbolic"
+                                                onClicked: if (window) {
+                                                    window.setMaximize(!isMaximized, !isMaximized)
+                                                }
                                                 background.opacity: settings.buttonOpacity
                                                 implicitWidth: buttonSize
                                                 implicitHeight: buttonSize
-                                                ToolTip.text: window?.maximized ? "Restore" : "Maximize"
+                                                ToolTip.text: isMaximized ? "Restore [PgUp]" : "Maximize [PgUp]"
                                                 ToolTip.visible: hovered
                                             }
 
@@ -539,7 +598,7 @@ KWin.TabBoxSwitcher {
                                                 background.opacity: settings.buttonOpacity
                                                 implicitWidth: buttonSize
                                                 implicitHeight: buttonSize
-                                                ToolTip.text: "Close"
+                                                ToolTip.text: "Close [Del]"
                                                 ToolTip.visible: hovered
                                             }
                                         }
@@ -593,7 +652,7 @@ KWin.TabBoxSwitcher {
             }
         }
 
-        Item {
+        FocusScope {
             id: settingsWnd
             visible: tabBox.showPreview
 
@@ -628,6 +687,24 @@ KWin.TabBoxSwitcher {
                         visible: tabBox.isPreview
                         Layout.fillWidth: true
                         wrapMode: Text.Wrap
+                    }
+
+                    PlasmaComponents3.Label {
+                        text: "pendingIndex: " + tabBox.pendingIndex
+                        Layout.fillWidth: true
+                    }
+
+                    PlasmaComponents3.Label {
+                        text: "idx: " + tabBox.model.index(tabBox.currentIndex, 0)
+                        Layout.fillWidth: true
+                    }
+                    PlasmaComponents3.Label {
+                        text: "role: " + windowIdRole
+                        Layout.fillWidth: true
+                    }
+                    PlasmaComponents3.Label {
+                        text: "wid:" + tabBox.model.data(tabBox.model.index(tabBox.currentIndex, 0), windowIdRole) 
+                        Layout.fillWidth: true
                     }
 
                     RowLayout {
@@ -898,6 +975,12 @@ KWin.TabBoxSwitcher {
         connectedSources: []
         onNewData: {
             executableSource.disconnectSource(sourceName)
+        }
+
+        function showDebugInfo(window, caption) {
+            var text = dumpProperties(window)
+            var cmd = "echo '" + text.replace(/'/g, "'\\''") + "' > /tmp/kwin_debug_window.txt && kdialog --textbox /tmp/kwin_debug_window.txt --title 'KWin: " + caption + "' --geometry 480x600"
+            executableSource.connectSource(cmd)
         }
     }
 }

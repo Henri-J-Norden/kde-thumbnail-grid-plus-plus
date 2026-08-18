@@ -17,11 +17,18 @@ import org.kde.ksvg as KSvg
 import org.kde.plasma.components 3.0 as PlasmaComponents3
 import org.kde.kwin as KWin
 import org.kde.kirigami as Kirigami
+import org.kde.kquickcontrolsaddons
 
 KWin.TabBoxSwitcher {
     id: tabBox
 
     property int pendingIndex: -1
+
+    // KWin 6 no longer exposes x11Window/windowId to QML, so the only reliable
+    // discriminator is the C++ class name leaking through QObject's toString().
+    function isX11Window(win) {
+        return win ? /X11Window/.test(String(win)) : false
+    }
 
     Settings {
         id: settings
@@ -49,6 +56,7 @@ KWin.TabBoxSwitcher {
         property bool buttonClose: true
         property bool buttonDebug: false
         property real buttonSize: 1.6
+        property bool showProtocol: true
     }
 
     readonly property real buttonSize: Kirigami.Units.gridUnit * settings.buttonSize
@@ -109,6 +117,275 @@ KWin.TabBoxSwitcher {
                 id: dialogMainItem
                 focus: true
                 anchors.fill: parent
+
+                Clipboard { id: clipboard }
+
+                Timer {
+                    id: mnemonicCopyTimer
+                    property var item: null
+                    interval: Kirigami.Units.longDuration
+                    onTriggered: {
+                        if (mnemonicCopyTimer.item) {
+                            mnemonicCopyTimer.item.copy()
+                            mnemonicCopyTimer.item = null
+                        }
+                        copyMenu.dismiss()
+                    }
+                }
+
+                function escapeHtml(s) {
+                    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+                }
+
+                component CopyItem: MenuItem {
+                    id: copyItem
+                    // "&" marks the mnemonic character, e.g. "Process &Path: "
+                    property string prefix: ""
+                    property string value: ""
+                    readonly property int mnemonicIndex: prefix.indexOf("&")
+                    readonly property string plainPrefix: prefix.replace("&", "")
+                    readonly property string mnemonic: mnemonicIndex >= 0 && mnemonicIndex + 1 < prefix.length
+                                                       ? prefix[mnemonicIndex + 1] : ""
+                    // KWin delivers synthesized key events without event.text, so match
+                    // on the key code: for letters/digits it equals the uppercase char code.
+                    readonly property int mnemonicKey: mnemonic ? mnemonic.toUpperCase().charCodeAt(0) : 0
+                    text: plainPrefix + value
+                    function copy() {
+                        clipboard.content = copyItem.value
+                    }
+                    onTriggered: copyItem.copy()
+                    contentItem: Label {
+                        text: {
+                            const raw = copyItem.plainPrefix
+                            const i = copyItem.mnemonicIndex
+                            let head = dialogMainItem.escapeHtml(raw)
+                            if (i >= 0 && i < raw.length) {
+                                head = dialogMainItem.escapeHtml(raw.slice(0, i))
+                                      + "<u>" + dialogMainItem.escapeHtml(raw[i]) + "</u>"
+                                      + dialogMainItem.escapeHtml(raw.slice(i + 1))
+                            }
+                            return head + dialogMainItem.escapeHtml(copyItem.value)
+                        }
+                        textFormat: Text.StyledText
+                        elide: Text.ElideRight
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    Keys.onPressed: (event) => {
+                        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                            copyItem.copy()
+                            copyMenu.dismiss()
+                            event.accepted = true
+                        } else if (event.key === Qt.Key_Space || event.key === Qt.Key_Escape) {
+                            copyMenu.dismiss()
+                            event.accepted = true
+                        } else if (event.key === Qt.Key_Left || event.key === Qt.Key_Right
+                                   || event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {
+                            dialogMainItem.navigate(event.key)
+                            event.accepted = true
+                        } else if (copyMenu.triggerMnemonic(event.key)) {
+                            event.accepted = true
+                        }
+                    }
+                }
+
+                Menu {
+                    id: copyMenu
+                    property var sourceWindow: null
+                    property bool sticky: false
+                    onClosed: copyMenu.sourceWindow = null
+                    onOpened: {
+                        copyMenu.currentIndex = 0
+                        copyMenu.refreshProcessInfo()
+                    }
+                    readonly property var asyncItems: [processPathItem, processCmdlineItem,
+                                                       cwdItem, scopeItem, parentItem]
+                    function refreshProcessInfo() {
+                        for (let i = 0; i < copyMenu.asyncItems.length; ++i) {
+                            copyMenu.asyncItems[i].value = "(loading...)"
+                        }
+                        const pid = copyMenu.sourceWindow?.pid
+                        if (!pid) return
+                        executableSource.fetch("readlink /proc/" + pid + "/exe", processPathItem, false)
+                        executableSource.fetch("cat /proc/" + pid + "/cmdline | tr '\\0' ' '", processCmdlineItem, false)
+                        executableSource.fetch("readlink /proc/" + pid + "/cwd", cwdItem, false)
+                        executableSource.fetch("cat /proc/" + pid + "/cgroup | head -n1 | sed 's|.*/||'",
+                                               scopeItem, false)
+                        executableSource.fetch("ps -o ppid=,comm= -p " + pid + " | tr -s ' '",
+                                               parentItem, false)
+                    }
+                    // Must stay in the same order as the CopyItem declarations below,
+                    // since triggerMnemonic() maps the index onto currentIndex.
+                    readonly property var items: [uuidItem, pidItem, processPathItem,
+                                                  processCmdlineItem, captionItem, cwdItem,
+                                                  scopeItem, parentItem, desktopFileItem,
+                                                  platformItem, frameGeoItem, outputItem,
+                                                  desktopsItem, activitiesItem, stateItem,
+                                                  ruleItem]
+                    function triggerMnemonic(keyCode) {
+                        for (let i = 0; i < copyMenu.items.length; ++i) {
+                            const item = copyMenu.items[i]
+                            if (item && item.mnemonicKey && item.mnemonicKey === keyCode) {
+                                // Highlight first, then copy shortly after, so the
+                                // selection is visible before the menu closes. KWin does
+                                // not forward key releases, so this can't be done onReleased.
+                                copyMenu.currentIndex = i
+                                mnemonicCopyTimer.item = item
+                                mnemonicCopyTimer.restart()
+                                return true
+                            }
+                        }
+                        return false
+                    }
+                    function dismiss() {
+                        copyMenu.sticky = false
+                        copyMenu.close()
+                    }
+                    function openAt(win, pos) {
+                        copyMenu.sticky = true
+                        copyMenu.sourceWindow = win
+                        if (copyMenu.visible) {
+                            // Already shown: just move it and refresh instead of
+                            // close()+popup(), whose pending close transition would
+                            // immediately hide the freshly reopened menu.
+                            if (pos) {
+                                copyMenu.x = pos.x
+                                copyMenu.y = pos.y
+                            }
+                            copyMenu.refreshProcessInfo()
+                        } else if (pos) {
+                            copyMenu.popup(pos)
+                        } else {
+                            copyMenu.popup()
+                        }
+                    }
+                    function show(win, pos) {
+                        if (copyMenu.sticky) {
+                            copyMenu.dismiss()
+                        } else {
+                            copyMenu.openAt(win, pos)
+                        }
+                    }
+
+                    CopyItem {
+                        id: uuidItem
+                        prefix: "&UUID: "
+                        value: String(copyMenu.sourceWindow?.internalId ?? "")
+                    }
+                    CopyItem {
+                        id: pidItem
+                        prefix: "PI&D: "
+                        value: String(copyMenu.sourceWindow?.pid ?? "")
+                    }
+                    CopyItem {
+                        id: processPathItem
+                        prefix: "Process &Path: "
+                        value: "(loading...)"
+                    }
+                    CopyItem {
+                        id: processCmdlineItem
+                        prefix: "Process &Args: "
+                        value: "(loading...)"
+                    }
+                    CopyItem {
+                        id: captionItem
+                        prefix: "Captio&n: "
+                        value: String(copyMenu.sourceWindow?.caption ?? "")
+                    }
+                    CopyItem {
+                        id: cwdItem
+                        prefix: "&CWD: "
+                        value: "(loading...)"
+                    }
+                    CopyItem {
+                        id: scopeItem
+                        prefix: "Scop&e: "
+                        value: "(loading...)"
+                    }
+                    CopyItem {
+                        id: parentItem
+                        prefix: "&Launched by: "
+                        value: "(loading...)"
+                    }
+                    CopyItem {
+                        id: desktopFileItem
+                        prefix: "Desktop &File: "
+                        value: String(copyMenu.sourceWindow?.desktopFileName ?? "")
+                    }
+                    CopyItem {
+                        id: platformItem
+                        prefix: "Platfor&m: "
+                        value: {
+                            const win = copyMenu.sourceWindow
+                            if (!win) return ""
+                            return tabBox.isX11Window(win) ? "X11/XWayland" : "Wayland"
+                        }
+                    }
+                    CopyItem {
+                        id: frameGeoItem
+                        prefix: "Frame &Geometry: "
+                        value: {
+                            const g = copyMenu.sourceWindow?.frameGeometry
+                            if (!g) return ""
+                            return "x:" + g.x + " y:" + g.y + " w:" + g.width + " h:" + g.height
+                        }
+                    }
+                    CopyItem {
+                        id: outputItem
+                        prefix: "&Output: "
+                        value: String(copyMenu.sourceWindow?.output?.name ?? "")
+                    }
+                    CopyItem {
+                        id: desktopsItem
+                        prefix: "Des&ktops: "
+                        value: {
+                            const win = copyMenu.sourceWindow
+                            if (!win) return ""
+                            if (win.onAllDesktops) return "all"
+                            return (win.desktops || []).map(d => d.name || d.id).join(", ")
+                        }
+                    }
+                    CopyItem {
+                        id: activitiesItem
+                        prefix: "Acti&vities: "
+                        value: {
+                            const a = copyMenu.sourceWindow?.activities
+                            return (a && a.length) ? a.join(", ") : "all"
+                        }
+                    }
+                    CopyItem {
+                        id: stateItem
+                        prefix: "&State: "
+                        value: {
+                            const win = copyMenu.sourceWindow
+                            if (!win) return ""
+                            const flags = []
+                            if (win.minimized) flags.push("minimized")
+                            if (win.fullScreen) flags.push("fullScreen")
+                            if (win.keepAbove) flags.push("keepAbove")
+                            if (win.keepBelow) flags.push("keepBelow")
+                            if (win.noBorder) flags.push("noBorder")
+                            if (win.skipTaskbar) flags.push("skipTaskbar")
+                            if (win.skipPager) flags.push("skipPager")
+                            if (win.skipSwitcher) flags.push("skipSwitcher")
+                            if (win.demandsAttention) flags.push("demandsAttention")
+                            return flags.length ? flags.join(", ") : "none"
+                        }
+                    }
+                    CopyItem {
+                        id: ruleItem
+                        prefix: "KWin &Rule: "
+                        value: {
+                            const win = copyMenu.sourceWindow
+                            if (!win) return ""
+                            const cls = String(win.resourceClass ?? "")
+                            return "[" + (cls || "window") + "]\n"
+                                 + "Description=Rule for " + (cls || "window") + "\n"
+                                 + "wmclass=" + cls + "\n"
+                                 + "wmclasscomplete=false\n"
+                                 + "wmclassmatch=1\n"
+                        }
+                    }
+                }
 
                 // Opaque backing to match original opaque look
                 Rectangle {
@@ -268,10 +545,37 @@ KWin.TabBoxSwitcher {
                 readonly property int captionRole: Qt.UserRole + 1
                 readonly property int windowIdRole: Qt.UserRole + 5
 
-                function handleSpecialKeys(key) {
+                function currentWindow() {
                     const idx = tabBox.model.index(tabBox.currentIndex, 0)
                     const wid = tabBox.model.data(idx, windowIdRole)
-                    const window = (KWin.Workspace?.stackingOrder || []).find(w => w.internalId === wid)
+                    return (KWin.Workspace?.stackingOrder || []).find(w => w.internalId === wid)
+                }
+
+                function currentDelegatePosition() {
+                    const delegateItem = repeater.itemAt(0)?.itemAt(tabBox.currentIndex)
+                    if (!delegateItem) return null
+                    return delegateItem.mapToItem(dialogMainItem, 0, delegateItem.height)
+                }
+
+                function reopenCopyMenu() {
+                    if (!copyMenu.sticky) return
+                    const win = currentWindow()
+                    if (!win) {
+                        copyMenu.dismiss()
+                        return
+                    }
+                    copyMenu.openAt(win, currentDelegatePosition())
+                }
+
+                Timer {
+                    id: reopenCopyMenuTimer
+                    interval: 0
+                    onTriggered: dialogMainItem.reopenCopyMenu()
+                }
+
+                function handleSpecialKeys(key) {
+                    const idx = tabBox.model.index(tabBox.currentIndex, 0)
+                    const window = currentWindow()
 
                     if (key === Qt.Key_Delete) {
                         if (tabBox.pendingIndex < 0) {
@@ -292,6 +596,22 @@ KWin.TabBoxSwitcher {
                         if (window) window.keepBelow = !window.keepBelow
                     } else if (key === Qt.Key_D) {
                         if (window) window.onAllDesktops = !window.onAllDesktops
+                    } else if (key === Qt.Key_P) {
+                        if (window) {
+                            clipboard.content = String(window.pid)
+                        }
+                    } else if (key === Qt.Key_Space) {
+                        if (window) copyMenu.show(window, currentDelegatePosition())
+                    } else if (key === Qt.Key_H) {
+                        if (window?.pid) {
+                            // $TERMINAL overrides the terminal configured in KDE
+                            // (kdeglobals [General] TerminalApplication, what KIO's
+                            // KTerminalLauncherJob reads); konsole as last resort.
+                            executableSource.connectSource(
+                                "term=\"${TERMINAL:-$(kreadconfig6 --file kdeglobals"
+                                + " --group General --key TerminalApplication 2>/dev/null)}\";"
+                                + " \"${term:-konsole}\" -e htop -p " + window.pid)
+                        }
                     } else if (key === Qt.Key_F12) {
                         var caption = tabBox.model.data(idx, captionRole)
                         executableSource.showDebugInfo(window, caption)
@@ -315,7 +635,11 @@ KWin.TabBoxSwitcher {
 
                 Connections {
                     target: tabBox
+                    function onCurrentIndexChanged() {
+                        if (copyMenu.sticky) reopenCopyMenuTimer.restart()
+                    }
                     function onVisibleChanged() {
+                        copyMenu.dismiss()
                         tabBox.animationFinished = false
                         if (tabBox.visible) {
                             armTimer.start()
@@ -357,6 +681,8 @@ KWin.TabBoxSwitcher {
 
                                 readonly property bool isMaximized: window ?
                                     (window.frameGeometry.width >= tabBox.screenGeometry.width - 1) : false
+
+                                readonly property bool isX11: tabBox.isX11Window(window)
 
                                 //-- Background/Highlight --
                                 KSvg.FrameSvgItem {
@@ -594,7 +920,10 @@ KWin.TabBoxSwitcher {
                                                 id: buttonClose
                                                 visible: settings.buttonClose && model.closeable && (isCurrent || hoverHandler.hovered || buttonClose.hovered)
                                                 icon.name: "window-close-symbolic"
-                                                onClicked: tabBox.model.close(index)
+                                                onClicked: {
+                                                    tabBox.pendingIndex = tabBox.currentIndex
+                                                    tabBox.model.close(index)
+                                                }
                                                 background.opacity: settings.buttonOpacity
                                                 implicitWidth: buttonSize
                                                 implicitHeight: buttonSize
@@ -609,6 +938,7 @@ KWin.TabBoxSwitcher {
 
                                         // Application Icon Overlay
                                         Kirigami.Icon {
+                                            id: appIcon
                                             anchors.horizontalCenter: parent.horizontalCenter
                                             anchors.bottom: parent.bottom
                                             anchors.bottomMargin: -height/2 
@@ -616,6 +946,40 @@ KWin.TabBoxSwitcher {
                                             height: width
                                             source: model.icon
                                             opacity: settings.thumbnailOpacity
+                                        }
+
+                                        // Windowing protocol badge, right of the icon
+                                        Loader {
+                                            active: settings.showProtocol
+                                            visible: active
+                                            anchors.left: appIcon.right
+                                            anchors.leftMargin: -Kirigami.Units.smallSpacing - width * 3 / 7
+                                            anchors.bottom: appIcon.bottom
+                                            sourceComponent: isX11 ? x11Badge : waylandBadge
+                                        }
+
+                                        Component {
+                                            id: waylandBadge
+                                            Kirigami.Icon {
+                                                source: "wayland"
+                                                fallback: "preferences-desktop-display"
+                                                width: Math.max(Kirigami.Units.iconSizes.small,
+                                                                dialogMainItem.iconSize / 2)
+                                                height: width
+                                                opacity: settings.thumbnailOpacity
+                                            }
+                                        }
+
+                                        Component {
+                                            id: x11Badge
+                                            Kirigami.Icon {
+                                                source: "xorg"
+                                                fallback: "preferences-desktop-display"
+                                                width: Math.max(Kirigami.Units.iconSizes.small,
+                                                                dialogMainItem.iconSize / 2)
+                                                height: width
+                                                opacity: settings.thumbnailOpacity
+                                            }
                                         }
                                     }
 
@@ -689,24 +1053,6 @@ KWin.TabBoxSwitcher {
                         wrapMode: Text.Wrap
                     }
 
-                    PlasmaComponents3.Label {
-                        text: "pendingIndex: " + tabBox.pendingIndex
-                        Layout.fillWidth: true
-                    }
-
-                    PlasmaComponents3.Label {
-                        text: "idx: " + tabBox.model.index(tabBox.currentIndex, 0)
-                        Layout.fillWidth: true
-                    }
-                    PlasmaComponents3.Label {
-                        text: "role: " + windowIdRole
-                        Layout.fillWidth: true
-                    }
-                    PlasmaComponents3.Label {
-                        text: "wid:" + tabBox.model.data(tabBox.model.index(tabBox.currentIndex, 0), windowIdRole) 
-                        Layout.fillWidth: true
-                    }
-
                     RowLayout {
                         Layout.fillWidth: true
                         PlasmaComponents3.Label {
@@ -762,6 +1108,12 @@ KWin.TabBoxSwitcher {
                             text: "Select with mouse hover"
                             checked: settings.hoverSelection
                             onCheckedChanged: settings.hoverSelection = checked
+                        }
+                        Item { Layout.fillWidth: true }
+                        PlasmaComponents3.CheckBox {
+                            text: "Show windowing protocol"
+                            checked: settings.showProtocol
+                            onCheckedChanged: settings.showProtocol = checked
                         }
                         Item { Layout.fillWidth: true }
                         PlasmaComponents3.CheckBox {
@@ -973,7 +1325,19 @@ KWin.TabBoxSwitcher {
         id: executableSource
         engine: "executable"
         connectedSources: []
+        property var _pending: ({})
+        function fetch(cmd, item, copy) {
+            executableSource._pending[cmd] = { "item": item, "copy": copy }
+            executableSource.connectSource(cmd)
+        }
         onNewData: {
+            const req = executableSource._pending[sourceName]
+            if (req) {
+                const result = String(data.stdout).trim()
+                if (req.item) req.item.value = result
+                if (req.copy) clipboard.content = result
+                delete executableSource._pending[sourceName]
+            }
             executableSource.disconnectSource(sourceName)
         }
 

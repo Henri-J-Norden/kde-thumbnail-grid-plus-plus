@@ -13,9 +13,9 @@
         ],
         "Description": "Thumbnail Grid, but highly customizable and with more features.",
         "Icon": "preferences-system-windows-switcher-big-icons",
-        "Id": "thumbnail_grid_plus_plus",
+        "Id": "thumbnail_grid_plus_plus_alt",
         "License": "GPL",
-        "Name": "Thumbnail Grid ++",
+        "Name": "Thumbnail Grid ++ (alt)",
         "ServiceTypes": [
             "KWin/WindowSwitcher"
         ]

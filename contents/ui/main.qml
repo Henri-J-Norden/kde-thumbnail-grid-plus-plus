@@ -534,7 +534,7 @@ KWin.TabBoxSwitcher {
     }
 
     readonly property real buttonSize: Kirigami.Units.gridUnit * settings.buttonSize
-    readonly property bool isAlternative: false  // tabBox.mode is undefined
+    readonly property bool isAlternative: true  // tabBox.mode is undefined
     readonly property bool isPreview: tabBox.automaticallyHide === undefined
     readonly property bool showPreview: isPreview || showSettings
     property bool showSettings: false

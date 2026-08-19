@@ -27,6 +27,8 @@ FocusScope {
     required property bool isPreview
     // tabBox.toFractionString, passed in as a function value.
     required property var toFractionString
+    // Already-parsed max grid aspect ratio; the slider shows it, the text field sets it.
+    required property real maxGridAspectRatio
 
     width: settingsItem.implicitWidth
     height: settingsItem.implicitHeight
@@ -195,7 +197,7 @@ FocusScope {
                     from: 0.0
                     to: 5.0
                     stepSize: 0.01
-                    value: Math.max(0, Math.min(5, dialogMainItem.maxGridAspectRatioValue))
+                    value: Math.max(0, Math.min(5, root.maxGridAspectRatio))
                     onMoved: root.cfg.maxGridAspectRatioInput = root.toFractionString(value)
                     Layout.fillWidth: true
                 }

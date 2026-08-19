@@ -70,13 +70,26 @@ KWin.TabBoxSwitcher {
         category: tabBox.isAlternative ? "Alt" : "Main"
         location: StandardPaths.writableLocation(StandardPaths.GenericConfigLocation) + "/kwin_thumbnail_grid_plus.ini"
         property bool hoverSelection: true
+        property bool showSettingsButton: true
+        property bool showProtocol: true
+        property bool lockGridWidth: true
+        property bool centerHighlightButtons: true
+
         property int thumbnailWidthGridUnits: 16
         property string thumbnailHeightInput: "16:10"
-        property int iconSizeIndex: 4
+        property string maxGridAspectRatioInput: "21:9"
+        
+        property int previewRepeatCount: 1
+        property real buttonSize: 1.6
+
         property real opacityBackground: 0.5
         property real opacityThumbnail: 1.0
-        property int previewRepeatCount: 1
-        property string maxGridAspectRatioInput: "21:9"
+        property real opacityWindowButton: 0.75
+        property real opacityWindow: 0.7
+
+        property int iconSizeIndex: 4
+
+        // Indices into effectModeModel
         property int minimizedItalics: 1
         property int minimizedBlur: 2
         property int minimizedContrast: 1
@@ -87,9 +100,7 @@ KWin.TabBoxSwitcher {
         property int minimizedStrikethrough: 0
         property int minimizedUnderline: 0
         property int minimizedIcon: 0
-        property real opacityWindowButton: 0.75
-        property bool showSettingsButton: true
-        property bool lockGridWidth: true
+
         // Indices into buttonModeModel.
         property int buttonMaximize: 2
         property int buttonMaximizeHorizontal: 0
@@ -107,13 +118,32 @@ KWin.TabBoxSwitcher {
         property int buttonSkipTaskbar: 5
         property int buttonSkipPager: 5
         property int buttonSkipSwitcher: 5
-        property real opacityWindow: 0.7
+
         property bool buttonClose: true
         property bool buttonDebug: false
-        property real buttonSize: 1.6
-        property bool centerHighlightButtons: true
-        property bool showProtocol: true
     }
+
+    // Labels for the mode settings above. Deliberately not declared inside Settings:
+    // it would serialise them into the config file as if they were user values.
+    // The index is what gets stored, so these lists must not be reordered without
+    // remapping the saved values and WindowButton's mode switches.
+    readonly property var effectModeModel: ["0 Off",
+                                            "1 On (always)",
+                                            "2 On",
+                                            "3 On (not hovered)",
+                                            "4 On (not selected)"]
+    // "button" = flat style, "badge" = round with a shadow.
+    readonly property var buttonModeModel: ["0 Off",
+                                            "1 Button on hover, badge when active",
+                                            "2 Button on hover, badge when active & hovered",
+                                            "3 Button on hover + when active",
+                                            "4 Button on hover",
+                                            "5 Badge when active only"]
+
+    // Buttons with no window state to reflect (close, debug) have a plain on/off
+    // setting; these map it onto buttonModeModel.
+    readonly property int buttonModeOff: 0
+    readonly property int buttonModeOnHover: 4
 
     readonly property real buttonSize: Kirigami.Units.gridUnit * settings.buttonSize
     readonly property bool isAlternative: false  // tabBox.mode is undefined
@@ -180,17 +210,6 @@ KWin.TabBoxSwitcher {
                 id: dialogMainItem
                 focus: true
                 anchors.fill: parent
-
-                readonly property var effectModeModel: ["0 Off", "1 On (always)", "2 On", "3 On (not hovered)", "4 On (not selected)"]
-                // "button" = flat style, "badge" = round with a shadow. Ordered most to
-                // least decorated; the index is what gets stored in the config, so
-                // WindowButton's mode switches must be kept in sync with this list.
-                readonly property var buttonModeModel: ["0 Off",
-                                                        "1 Button on hover, badge when active",
-                                                        "2 Button on hover, badge when active & hovered",
-                                                        "3 Button on hover + when active",
-                                                        "4 Button on hover",
-                                                        "5 Badge when active only"]
 
                 Clipboard { id: clipboard }
 
@@ -1119,19 +1138,16 @@ KWin.TabBoxSwitcher {
                                                 layoutDirection: Qt.RightToLeft
 
                                                 // Close Button
-                                                PlasmaComponents3.Button {
-                                                    id: buttonClose
-                                                    visible: settings.buttonClose && model.closeable && (isCurrent || hoverHandler.hovered || buttonClose.hovered)
-                                                    icon.name: "window-close-symbolic"
-                                                    onClicked: {
+                                                WindowButton {
+                                                    cell: cell
+                                                    mode: settings.buttonClose ? tabBox.buttonModeOnHover : 0
+                                                    supported: model.closeable
+                                                    iconName: "window-close-symbolic"
+                                                    tooltipUnchecked: "Close [Del]"
+                                                    onToggled: {
                                                         tabBox.pendingIndex = tabBox.currentIndex
                                                         tabBox.model.close(index)
                                                     }
-                                                    background.opacity: settings.opacityWindowButton
-                                                    implicitWidth: buttonSize
-                                                    implicitHeight: buttonSize
-                                                    ToolTip.text: "Close [Del]"
-                                                    ToolTip.visible: hovered
                                                 }
 
                                                 // Maximize/Restore Button
@@ -1187,16 +1203,12 @@ KWin.TabBoxSwitcher {
                                                 }
 
                                                 // Debug Button
-                                                PlasmaComponents3.Button {
-                                                    id: buttonDebug
-                                                    visible: settings.buttonDebug && (isCurrent || hoverHandler.hovered || buttonDebug.hovered)
-                                                    icon.name: "info-symbolic"
-                                                    onClicked: executableSource.showDebugInfo(window, model.caption)
-                                                    background.opacity: settings.opacityWindowButton
-                                                    implicitWidth: buttonSize
-                                                    implicitHeight: buttonSize
-                                                    ToolTip.text: "Show window debug info [F12]"
-                                                    ToolTip.visible: hovered
+                                                WindowButton {
+                                                    cell: cell
+                                                    mode: settings.buttonDebug ? tabBox.buttonModeOnHover : 0
+                                                    iconName: "info-symbolic"
+                                                    tooltipUnchecked: "Show window debug info [F12]"
+                                                    onToggled: executableSource.showDebugInfo(window, model.caption)
                                                 }
                                             }
 
@@ -1525,7 +1537,7 @@ KWin.TabBoxSwitcher {
                                     MouseArea { id: maIndicator; anchors.fill: parent; hoverEnabled: true; }
                                 }
                                 PlasmaComponents3.ComboBox {
-                                    model: dialogMainItem.effectModeModel
+                                    model: tabBox.effectModeModel
                                     currentIndex: settings.minimizedIcon
                                     onActivated: settings.minimizedIcon = currentIndex
                                 }
@@ -1540,7 +1552,7 @@ KWin.TabBoxSwitcher {
                                     MouseArea { id: maIconOpacity; anchors.fill: parent; hoverEnabled: true; }
                                 }
                                 PlasmaComponents3.ComboBox {
-                                    model: dialogMainItem.effectModeModel
+                                    model: tabBox.effectModeModel
                                     currentIndex: settings.minimizedIconOpacity
                                     onActivated: settings.minimizedIconOpacity = currentIndex
                                 }
@@ -1553,7 +1565,7 @@ KWin.TabBoxSwitcher {
                                 Layout.alignment: Qt.AlignVCenter
                                 PlasmaComponents3.Label { text: "Italics" }
                                 PlasmaComponents3.ComboBox {
-                                    model: dialogMainItem.effectModeModel
+                                    model: tabBox.effectModeModel
                                     currentIndex: settings.minimizedItalics
                                     onActivated: settings.minimizedItalics = currentIndex
                                 }
@@ -1562,7 +1574,7 @@ KWin.TabBoxSwitcher {
                                 Layout.alignment: Qt.AlignVCenter
                                 PlasmaComponents3.Label { text: "Strikethrough" }
                                 PlasmaComponents3.ComboBox {
-                                    model: dialogMainItem.effectModeModel
+                                    model: tabBox.effectModeModel
                                     currentIndex: settings.minimizedStrikethrough
                                     onActivated: settings.minimizedStrikethrough = currentIndex
                                 }
@@ -1571,7 +1583,7 @@ KWin.TabBoxSwitcher {
                                 Layout.alignment: Qt.AlignVCenter
                                 PlasmaComponents3.Label { text: "Underline" }
                                 PlasmaComponents3.ComboBox {
-                                    model: dialogMainItem.effectModeModel
+                                    model: tabBox.effectModeModel
                                     currentIndex: settings.minimizedUnderline
                                     onActivated: settings.minimizedUnderline = currentIndex
                                 }
@@ -1584,7 +1596,7 @@ KWin.TabBoxSwitcher {
                                 Layout.alignment: Qt.AlignVCenter
                                 PlasmaComponents3.Label { text: "Contrast" }
                                 PlasmaComponents3.ComboBox {
-                                    model: dialogMainItem.effectModeModel
+                                    model: tabBox.effectModeModel
                                     currentIndex: settings.minimizedContrast
                                     onActivated: settings.minimizedContrast = currentIndex
                                 }
@@ -1593,7 +1605,7 @@ KWin.TabBoxSwitcher {
                                 Layout.alignment: Qt.AlignVCenter
                                 PlasmaComponents3.Label { text: "Opacity" }
                                 PlasmaComponents3.ComboBox {
-                                    model: dialogMainItem.effectModeModel
+                                    model: tabBox.effectModeModel
                                     currentIndex: settings.minimizedThumbnailOpacity
                                     onActivated: settings.minimizedThumbnailOpacity = currentIndex
                                 }
@@ -1602,7 +1614,7 @@ KWin.TabBoxSwitcher {
                                 Layout.alignment: Qt.AlignVCenter
                                 PlasmaComponents3.Label { text: "Scale" }
                                 PlasmaComponents3.ComboBox {
-                                    model: dialogMainItem.effectModeModel
+                                    model: tabBox.effectModeModel
                                     currentIndex: settings.minimizedThumbnailScale
                                     onActivated: settings.minimizedThumbnailScale = currentIndex
                                 }
@@ -1611,7 +1623,7 @@ KWin.TabBoxSwitcher {
                                 Layout.alignment: Qt.AlignVCenter
                                 PlasmaComponents3.Label { text: "Rotation" }
                                 PlasmaComponents3.ComboBox {
-                                    model: dialogMainItem.effectModeModel
+                                    model: tabBox.effectModeModel
                                     currentIndex: settings.minimizedThumbnailRotation
                                     onActivated: settings.minimizedThumbnailRotation = currentIndex
                                 }
@@ -1620,7 +1632,7 @@ KWin.TabBoxSwitcher {
                                 Layout.alignment: Qt.AlignVCenter
                                 PlasmaComponents3.Label { text: "Blur" }
                                 PlasmaComponents3.ComboBox {
-                                    model: dialogMainItem.effectModeModel
+                                    model: tabBox.effectModeModel
                                     currentIndex: settings.minimizedBlur
                                     onActivated: settings.minimizedBlur = currentIndex
                                 }
@@ -1783,7 +1795,7 @@ KWin.TabBoxSwitcher {
                             RowLayout {
                                 PlasmaComponents3.Label { text: "Pin" }
                             PlasmaComponents3.ComboBox {
-                                model: dialogMainItem.buttonModeModel
+                                model: tabBox.buttonModeModel
                                 currentIndex: settings.buttonPin
                                 onActivated: settings.buttonPin = currentIndex
                                 }
@@ -1791,7 +1803,7 @@ KWin.TabBoxSwitcher {
                             RowLayout {
                                 PlasmaComponents3.Label { text: "Keep below" }
                                 PlasmaComponents3.ComboBox {
-                                    model: dialogMainItem.buttonModeModel
+                                    model: tabBox.buttonModeModel
                                     currentIndex: settings.buttonKeepBelow
                                     onActivated: settings.buttonKeepBelow = currentIndex
                                 }
@@ -1799,7 +1811,7 @@ KWin.TabBoxSwitcher {
                             RowLayout {
                                 PlasmaComponents3.Label { text: "Keep above" }
                                 PlasmaComponents3.ComboBox {
-                                    model: dialogMainItem.buttonModeModel
+                                    model: tabBox.buttonModeModel
                                     currentIndex: settings.buttonKeepAbove
                                     onActivated: settings.buttonKeepAbove = currentIndex
                                 }
@@ -1807,7 +1819,7 @@ KWin.TabBoxSwitcher {
                             RowLayout {
                                 PlasmaComponents3.Label { text: "Fullscreen" }
                                 PlasmaComponents3.ComboBox {
-                                    model: dialogMainItem.buttonModeModel
+                                    model: tabBox.buttonModeModel
                                     currentIndex: settings.buttonFullscreen
                                     onActivated: settings.buttonFullscreen = currentIndex
                                 }
@@ -1815,7 +1827,7 @@ KWin.TabBoxSwitcher {
                             RowLayout {
                                 PlasmaComponents3.Label { text: "No titlebar" }
                                 PlasmaComponents3.ComboBox {
-                                    model: dialogMainItem.buttonModeModel
+                                    model: tabBox.buttonModeModel
                                     currentIndex: settings.buttonNoBorder
                                     onActivated: settings.buttonNoBorder = currentIndex
                                 }
@@ -1823,7 +1835,7 @@ KWin.TabBoxSwitcher {
                             RowLayout {
                                 PlasmaComponents3.Label { text: "Incognito" }
                                 PlasmaComponents3.ComboBox {
-                                    model: dialogMainItem.buttonModeModel
+                                    model: tabBox.buttonModeModel
                                     currentIndex: settings.buttonIncognito
                                     onActivated: settings.buttonIncognito = currentIndex
                                 }
@@ -1831,7 +1843,7 @@ KWin.TabBoxSwitcher {
                             RowLayout {
                                 PlasmaComponents3.Label { text: "Demands attention" }
                                 PlasmaComponents3.ComboBox {
-                                    model: dialogMainItem.buttonModeModel
+                                    model: tabBox.buttonModeModel
                                     currentIndex: settings.buttonDemandsAttention
                                     onActivated: settings.buttonDemandsAttention = currentIndex
                                 }
@@ -1839,7 +1851,7 @@ KWin.TabBoxSwitcher {
                             RowLayout {
                                 PlasmaComponents3.Label { text: "Shaded" }
                                 PlasmaComponents3.ComboBox {
-                                    model: dialogMainItem.buttonModeModel
+                                    model: tabBox.buttonModeModel
                                     currentIndex: settings.buttonShaded
                                     onActivated: settings.buttonShaded = currentIndex
                                 }
@@ -1847,7 +1859,7 @@ KWin.TabBoxSwitcher {
                             RowLayout {
                                 PlasmaComponents3.Label { text: "Transparency" }
                                 PlasmaComponents3.ComboBox {
-                                    model: dialogMainItem.buttonModeModel
+                                    model: tabBox.buttonModeModel
                                     currentIndex: settings.buttonTransparency
                                     onActivated: settings.buttonTransparency = currentIndex
                                 }
@@ -1855,7 +1867,7 @@ KWin.TabBoxSwitcher {
                             RowLayout {
                                 PlasmaComponents3.Label { text: "Skip taskbar" }
                                 PlasmaComponents3.ComboBox {
-                                    model: dialogMainItem.buttonModeModel
+                                    model: tabBox.buttonModeModel
                                     currentIndex: settings.buttonSkipTaskbar
                                     onActivated: settings.buttonSkipTaskbar = currentIndex
                                 }
@@ -1863,7 +1875,7 @@ KWin.TabBoxSwitcher {
                             RowLayout {
                                 PlasmaComponents3.Label { text: "Skip switcher" }
                                 PlasmaComponents3.ComboBox {
-                                    model: dialogMainItem.buttonModeModel
+                                    model: tabBox.buttonModeModel
                                     currentIndex: settings.buttonSkipSwitcher
                                     onActivated: settings.buttonSkipSwitcher = currentIndex
                                 }
@@ -1871,7 +1883,7 @@ KWin.TabBoxSwitcher {
                             RowLayout {
                                 PlasmaComponents3.Label { text: "Skip pager" }
                                 PlasmaComponents3.ComboBox {
-                                    model: dialogMainItem.buttonModeModel
+                                    model: tabBox.buttonModeModel
                                     currentIndex: settings.buttonSkipPager
                                     onActivated: settings.buttonSkipPager = currentIndex
                                 }
@@ -1894,7 +1906,7 @@ KWin.TabBoxSwitcher {
                             RowLayout {
                                 PlasmaComponents3.Label { text: "Minimize" }
                                 PlasmaComponents3.ComboBox {
-                                    model: dialogMainItem.buttonModeModel
+                                    model: tabBox.buttonModeModel
                                     currentIndex: settings.buttonMinimize
                                     onActivated: settings.buttonMinimize = currentIndex
                                 }
@@ -1902,7 +1914,7 @@ KWin.TabBoxSwitcher {
                             RowLayout {
                                 PlasmaComponents3.Label { text: "Maximize" }
                                 PlasmaComponents3.ComboBox {
-                                    model: dialogMainItem.buttonModeModel
+                                    model: tabBox.buttonModeModel
                                     currentIndex: settings.buttonMaximize
                                     onActivated: settings.buttonMaximize = currentIndex
                                 }
@@ -1910,7 +1922,7 @@ KWin.TabBoxSwitcher {
                             RowLayout {
                                 PlasmaComponents3.Label { text: "Maximize horizontally" }
                                 PlasmaComponents3.ComboBox {
-                                    model: dialogMainItem.buttonModeModel
+                                    model: tabBox.buttonModeModel
                                     currentIndex: settings.buttonMaximizeHorizontal
                                     onActivated: settings.buttonMaximizeHorizontal = currentIndex
                                 }
@@ -1918,7 +1930,7 @@ KWin.TabBoxSwitcher {
                             RowLayout {
                                 PlasmaComponents3.Label { text: "Maximize vertically" }
                                 PlasmaComponents3.ComboBox {
-                                    model: dialogMainItem.buttonModeModel
+                                    model: tabBox.buttonModeModel
                                     currentIndex: settings.buttonMaximizeVertical
                                     onActivated: settings.buttonMaximizeVertical = currentIndex
                                 }

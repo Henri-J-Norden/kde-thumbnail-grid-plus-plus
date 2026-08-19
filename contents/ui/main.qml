@@ -90,6 +90,7 @@ KWin.TabBoxSwitcher {
         property real opacityWindowButton: 0.75
         property bool showSettingsButton: true
         property bool lockGridWidth: true
+        // Indices into buttonModeModel.
         property int buttonMaximize: 2
         property int buttonMaximizeHorizontal: 0
         property int buttonMaximizeVertical: 0
@@ -98,14 +99,14 @@ KWin.TabBoxSwitcher {
         property int buttonMinimize: 2
         property int buttonPin: 1
         property int buttonKeepAbove: 1
-        property int buttonKeepBelow: 0
-        property int buttonIncognito: 0
-        property int buttonDemandsAttention: 4
-        property int buttonShaded: 0  // Broken on wayland https://bugs.kde.org/show_bug.cgi?id=377162
-        property int buttonTransparency: 4
-        property int buttonSkipTaskbar: 4
-        property int buttonSkipPager: 4
-        property int buttonSkipSwitcher: 4
+        property int buttonKeepBelow: 5
+        property int buttonIncognito: 5
+        property int buttonDemandsAttention: 5
+        property int buttonShaded: 5  // Broken on wayland https://bugs.kde.org/show_bug.cgi?id=377162
+        property int buttonTransparency: 5
+        property int buttonSkipTaskbar: 5
+        property int buttonSkipPager: 5
+        property int buttonSkipSwitcher: 5
         property real opacityWindow: 0.7
         property bool buttonClose: true
         property bool buttonDebug: false
@@ -180,8 +181,16 @@ KWin.TabBoxSwitcher {
                 focus: true
                 anchors.fill: parent
 
-                readonly property var effectModeModel: ["Off", "On (always)", "On", "On (not hovered)", "On (not selected)"]
-                readonly property var buttonModeModel: ["Off", "On", "On (no highlight)", "On (basic highlight)", "On (active only)"]
+                readonly property var effectModeModel: ["0 Off", "1 On (always)", "2 On", "3 On (not hovered)", "4 On (not selected)"]
+                // "button" = flat style, "badge" = round with a shadow. Ordered most to
+                // least decorated; the index is what gets stored in the config, so
+                // WindowButton's mode switches must be kept in sync with this list.
+                readonly property var buttonModeModel: ["0 Off",
+                                                        "1 Button on hover, badge when active",
+                                                        "2 Button on hover, badge when active & hovered",
+                                                        "3 Button on hover + when active",
+                                                        "4 Button on hover",
+                                                        "5 Badge when active only"]
 
                 Clipboard { id: clipboard }
 
@@ -714,9 +723,9 @@ KWin.TabBoxSwitcher {
                     } else if (key === Qt.Key_PageDown) {
                         if (window) window.minimized = !window.minimized;
                     } else if (key === Qt.Key_Home) {
-                        if (window) { const area = KWin.Workspace?.clientArea(KWin.Workspace.MaximizeArea, window); const isV = window.frameGeometry.height >= area?.height - 1; window.setMaximize(false, !isV) }
+                        if (window) { const area = KWin.Workspace?.clientArea(KWin.Workspace.MaximizeArea, window); const isV = window.frameGeometry.height >= area?.height - 1; const isH = window.frameGeometry.width >= area?.width - 1; window.setMaximize(!isV, isH) }
                     } else if (key === Qt.Key_End) {
-                        if (window) { const area = KWin.Workspace?.clientArea(KWin.Workspace.MaximizeArea, window); const isH = window.frameGeometry.width >= area?.width - 1; window.setMaximize(!isH, false) }
+                        if (window) { const area = KWin.Workspace?.clientArea(KWin.Workspace.MaximizeArea, window); const isV = window.frameGeometry.height >= area?.height - 1; const isH = window.frameGeometry.width >= area?.width - 1; window.setMaximize(isV, !isH) }
                     } else if (key === Qt.Key_F) {
                         if (window) window.fullScreen = !window.fullScreen
                     } else if (key === Qt.Key_T) {
@@ -844,10 +853,16 @@ KWin.TabBoxSwitcher {
                             }
 
                             delegate: Item {
+                                id: cell
                                 width: dialogMainItem.cellWidth
                                 height: dialogMainItem.cellHeight
-                                
+
                                 readonly property bool isCurrent: index === tabBox.currentIndex
+
+                                // Context consumed by the WindowButton instances below.
+                                readonly property bool hovered: hoverHandler.hovered
+                                readonly property real buttonSize: tabBox.buttonSize
+                                readonly property real buttonBackgroundOpacity: settings.opacityWindowButton
 
                                 function effectActive(mode) {
                                     if (!window || !window.minimized) return false;
@@ -859,20 +874,6 @@ KWin.TabBoxSwitcher {
                                         case 4: return !isCurrent;
                                         default: return false;
                                     }
-                                }
-
-                                function buttonVisible(mode, state) {
-                                    switch (mode) {
-                                        case 0: return false;
-                                        case 1: case 3: return state || isCurrent || hoverHandler.hovered;
-                                        case 2: return isCurrent || hoverHandler.hovered;
-                                        case 4: return state;
-                                        default: return false;
-                                    }
-                                }
-
-                                function buttonHighlight(mode, state) {
-                                    return (mode === 1 || mode === 4) && state;
                                 }
 
                                 readonly property var window: {
@@ -890,6 +891,8 @@ KWin.TabBoxSwitcher {
                                     (window.frameGeometry.height >= maximizeArea?.height - 1 && !window.fullScreen) : false
 
                                 readonly property bool isMaximized: isMaximizedHorizontal && isMaximizedVertical
+
+                                readonly property bool isTransparent: window ? (window.opacity < 1) : false
 
                                 readonly property bool isX11: tabBox.isX11Window(window)
 
@@ -970,479 +973,138 @@ KWin.TabBoxSwitcher {
                                                 spacing: Kirigami.Units.smallSpacing
 
                                                 // Pin to All Desktops Button
-                                                Loader {
-                                                    id: buttonPin
-                                                    visible: buttonVisible(settings.buttonPin, window?.onAllDesktops)
-                                                    sourceComponent: buttonHighlight(settings.buttonPin, window?.onAllDesktops) ? buttonPinTrue : buttonPinFalse
-                                                    readonly property string _tooltip_text: window?.onAllDesktops ? "Unpin from all desktops [D]" : "Pin to all desktops [D]"
-
-                                                    Component {
-                                                        id: buttonPinTrue
-                                                        PlasmaComponents3.RoundButton {
-                                                            icon.name: "window-pin-symbolic"
-                                                            onClicked: window.onAllDesktops = !window.onAllDesktops
-                                                            implicitWidth: buttonSize
-                                                            implicitHeight: buttonSize
-                                                            ToolTip.text: buttonPin._tooltip_text
-                                                            ToolTip.visible: hovered
-                                                            layer.enabled: true
-                                                            layer.effect: MultiEffect {
-                                                                shadowEnabled: true
-                                                                shadowColor: Kirigami.Theme.neutralTextColor
-                                                                shadowBlur: 0.5
-                                                            }
-                                                        }
-                                                    }
-
-                                                    Component {
-                                                        id: buttonPinFalse
-                                                        PlasmaComponents3.Button {
-                                                            icon.name: "window-pin-symbolic"
-                                                            onClicked: window.onAllDesktops = !window.onAllDesktops
-                                                            background.opacity: settings.opacityWindowButton
-                                                            implicitWidth: buttonSize
-                                                            implicitHeight: buttonSize
-                                                            ToolTip.text: buttonPin._tooltip_text
-                                                            ToolTip.visible: hovered
-                                                        }
-                                                    }
+                                                WindowButton {
+                                                    cell: cell
+                                                    mode: settings.buttonPin
+                                                    checked: window?.onAllDesktops ?? false
+                                                    iconName: "window-pin-symbolic"
+                                                    tooltipChecked: "Unpin from all desktops [D]"
+                                                    tooltipUnchecked: "Pin to all desktops [D]"
+                                                    onToggled: window.onAllDesktops = !window.onAllDesktops
                                                 }
 
                                                 // Keep Below Button
-                                                Loader {
-                                                    id: buttonKeepBelow
-                                                    visible: buttonVisible(settings.buttonKeepBelow, window?.keepBelow)
-                                                    sourceComponent: buttonHighlight(settings.buttonKeepBelow, window?.keepBelow) ? buttonKeepBelowTrue : buttonKeepBelowFalse
-                                                    readonly property string _tooltip_text: window?.keepBelow ? "Remove keep below [B]" : "Keep below [B]"
-
-                                                    Component {
-                                                        id: buttonKeepBelowTrue
-                                                        PlasmaComponents3.RoundButton {
-                                                            icon.name: "window-keep-below-symbolic"
-                                                            onClicked: window.keepBelow = !window.keepBelow
-                                                            implicitWidth: buttonSize
-                                                            implicitHeight: buttonSize
-                                                            ToolTip.text: buttonKeepBelow._tooltip_text
-                                                            ToolTip.visible: hovered
-                                                            layer.enabled: true
-                                                            layer.effect: MultiEffect {
-                                                                shadowEnabled: true
-                                                                shadowColor: Kirigami.Theme.neutralTextColor
-                                                                shadowBlur: 0.5
-                                                            }
-                                                        }
-                                                    }
-
-                                                    Component {
-                                                        id: buttonKeepBelowFalse
-                                                        PlasmaComponents3.Button {
-                                                            icon.name: "window-keep-below-symbolic"
-                                                            onClicked: window.keepBelow = !window.keepBelow
-                                                            background.opacity: settings.opacityWindowButton
-                                                            implicitWidth: buttonSize
-                                                            implicitHeight: buttonSize
-                                                            ToolTip.text: buttonKeepBelow._tooltip_text
-                                                            ToolTip.visible: hovered
-                                                        }
-                                                    }
+                                                WindowButton {
+                                                    cell: cell
+                                                    mode: settings.buttonKeepBelow
+                                                    checked: window?.keepBelow ?? false
+                                                    iconName: "window-keep-below-symbolic"
+                                                    tooltipChecked: "Remove keep below [B]"
+                                                    tooltipUnchecked: "Keep below [B]"
+                                                    onToggled: window.keepBelow = !window.keepBelow
                                                 }
 
                                                 // Keep Above Button
-                                                Loader {
-                                                    id: buttonKeepAbove
-                                                    visible: buttonVisible(settings.buttonKeepAbove, window?.keepAbove)
-                                                    sourceComponent: buttonHighlight(settings.buttonKeepAbove, window?.keepAbove) ? buttonKeepAboveTrue : buttonKeepAboveFalse
-                                                    readonly property string _tooltip_text: window?.keepAbove ? "Remove keep above [A]" : "Keep above [A]"
-
-                                                    Component {
-                                                        id: buttonKeepAboveTrue
-                                                        PlasmaComponents3.RoundButton {
-                                                            icon.name: "window-keep-above-symbolic"
-                                                            onClicked: window.keepAbove = !window.keepAbove
-                                                            implicitWidth: buttonSize
-                                                            implicitHeight: buttonSize
-                                                            ToolTip.text: buttonKeepAbove._tooltip_text
-                                                            ToolTip.visible: hovered
-                                                            layer.enabled: true
-                                                            layer.effect: MultiEffect {
-                                                                shadowEnabled: true
-                                                                shadowColor: Kirigami.Theme.neutralTextColor
-                                                                shadowBlur: 0.5
-                                                            }
-                                                        }
-                                                    }
-
-                                                    Component {
-                                                        id: buttonKeepAboveFalse
-                                                        PlasmaComponents3.Button {
-                                                            icon.name: "window-keep-above-symbolic"
-                                                            onClicked: window.keepAbove = !window.keepAbove
-                                                            background.opacity: settings.opacityWindowButton
-                                                            implicitWidth: buttonSize
-                                                            implicitHeight: buttonSize
-                                                            ToolTip.text: buttonKeepAbove._tooltip_text
-                                                            ToolTip.visible: hovered
-                                                        }
-                                                    }
+                                                WindowButton {
+                                                    cell: cell
+                                                    mode: settings.buttonKeepAbove
+                                                    checked: window?.keepAbove ?? false
+                                                    iconName: "window-keep-above-symbolic"
+                                                    tooltipChecked: "Remove keep above [A]"
+                                                    tooltipUnchecked: "Keep above [A]"
+                                                    onToggled: window.keepAbove = !window.keepAbove
                                                 }
 
                                                 // Fullscreen Button
-                                                Loader {
-                                                    id: buttonFullscreen
-                                                    visible: (window?.fullScreenable || false) && buttonVisible(settings.buttonFullscreen, window?.fullScreen)
-                                                    sourceComponent: buttonHighlight(settings.buttonFullscreen, window?.fullScreen) ? buttonFullscreenTrue : buttonFullscreenFalse
-                                                    readonly property string _tooltip_text: window?.fullScreen ? "Exit fullscreen [F]" : "Fullscreen [F]"
-
-                                                    Component {
-                                                        id: buttonFullscreenTrue
-                                                        PlasmaComponents3.RoundButton {
-                                                            icon.name: "view-fullscreen-symbolic"
-                                                            onClicked: window.fullScreen = !window.fullScreen
-                                                            implicitWidth: buttonSize
-                                                            implicitHeight: buttonSize
-                                                            ToolTip.text: buttonFullscreen._tooltip_text
-                                                            ToolTip.visible: hovered
-                                                            layer.enabled: true
-                                                            layer.effect: MultiEffect {
-                                                                shadowEnabled: true
-                                                                shadowColor: Kirigami.Theme.neutralTextColor
-                                                                shadowBlur: 0.5
-                                                            }
-                                                        }
-                                                    }
-
-                                                    Component {
-                                                        id: buttonFullscreenFalse
-                                                        PlasmaComponents3.Button {
-                                                            icon.name: "view-fullscreen-symbolic"
-                                                            onClicked: window.fullScreen = !window.fullScreen
-                                                            background.opacity: settings.opacityWindowButton
-                                                            implicitWidth: buttonSize
-                                                            implicitHeight: buttonSize
-                                                            ToolTip.text: buttonFullscreen._tooltip_text
-                                                            ToolTip.visible: hovered
-                                                        }
-                                                    }
+                                                WindowButton {
+                                                    cell: cell
+                                                    mode: settings.buttonFullscreen
+                                                    checked: window?.fullScreen ?? false
+                                                    supported: window?.fullScreenable ?? false
+                                                    iconName: "view-fullscreen-symbolic"
+                                                    tooltipChecked: "Exit fullscreen [F]"
+                                                    tooltipUnchecked: "Fullscreen [F]"
+                                                    onToggled: window.fullScreen = !window.fullScreen
                                                 }
 
                                                 // No Border Button
-                                                Loader {
-                                                    id: buttonNoBorder
-                                                    visible: buttonVisible(settings.buttonNoBorder, window?.noBorder)
-                                                    sourceComponent: buttonHighlight(settings.buttonNoBorder, window?.noBorder) ? buttonNoBorderTrue : buttonNoBorderFalse
-                                                    readonly property string _tooltip_text: window?.noBorder ? "Unhide titlebar & frame [T]" : "Hide titlebar & frame [T]"
-
-                                                    Component {
-                                                        id: buttonNoBorderTrue
-                                                        PlasmaComponents3.RoundButton {
-                                                            icon.name: "window-decorations-symbolic"
-                                                            onClicked: window.noBorder = !window.noBorder
-                                                            implicitWidth: buttonSize
-                                                            implicitHeight: buttonSize
-                                                            ToolTip.text: buttonNoBorder._tooltip_text
-                                                            ToolTip.visible: hovered
-                                                            layer.enabled: true
-                                                            layer.effect: MultiEffect {
-                                                                shadowEnabled: true
-                                                                shadowColor: Kirigami.Theme.neutralTextColor
-                                                                shadowBlur: 0.5
-                                                            }
-                                                        }
-                                                    }
-
-                                                    Component {
-                                                        id: buttonNoBorderFalse
-                                                        PlasmaComponents3.Button {
-                                                            icon.name: "window-decorations-symbolic"
-                                                            onClicked: window.noBorder = !window.noBorder
-                                                            background.opacity: settings.opacityWindowButton
-                                                            implicitWidth: buttonSize
-                                                            implicitHeight: buttonSize
-                                                            ToolTip.text: buttonNoBorder._tooltip_text
-                                                            ToolTip.visible: hovered
-                                                        }
-                                                    }
+                                                WindowButton {
+                                                    cell: cell
+                                                    mode: settings.buttonNoBorder
+                                                    checked: window?.noBorder ?? false
+                                                    iconName: "window-decorations-symbolic"
+                                                    tooltipChecked: "Unhide titlebar & frame [T]"
+                                                    tooltipUnchecked: "Hide titlebar & frame [T]"
+                                                    onToggled: window.noBorder = !window.noBorder
                                                 }
 
                                                 // Incognito Button
-                                                Loader {
-                                                    id: buttonIncognito
-                                                    visible: buttonVisible(settings.buttonIncognito, window?.excludeFromCapture)
-                                                    sourceComponent: buttonHighlight(settings.buttonIncognito, window?.excludeFromCapture) ? buttonIncognitoTrue : buttonIncognitoFalse
-                                                    readonly property string _tooltip_text: window?.excludeFromCapture ? "Disable hide from capture [I]" : "Hide from screenshots/recordings [I]"
-
-                                                    Component {
-                                                        id: buttonIncognitoTrue
-                                                        PlasmaComponents3.RoundButton {
-                                                            icon.name: "view-private-symbolic"
-                                                            onClicked: window.excludeFromCapture = !window.excludeFromCapture
-                                                            implicitWidth: buttonSize
-                                                            implicitHeight: buttonSize
-                                                            ToolTip.text: buttonIncognito._tooltip_text
-                                                            ToolTip.visible: hovered
-                                                            layer.enabled: true
-                                                            layer.effect: MultiEffect {
-                                                                shadowEnabled: true
-                                                                shadowColor: Kirigami.Theme.neutralTextColor
-                                                                shadowBlur: 0.5
-                                                            }
-                                                        }
-                                                    }
-
-                                                    Component {
-                                                        id: buttonIncognitoFalse
-                                                        PlasmaComponents3.Button {
-                                                            icon.name: "view-private-symbolic"
-                                                            onClicked: window.excludeFromCapture = !window.excludeFromCapture
-                                                            background.opacity: settings.opacityWindowButton
-                                                            implicitWidth: buttonSize
-                                                            implicitHeight: buttonSize
-                                                            ToolTip.text: buttonIncognito._tooltip_text
-                                                            ToolTip.visible: hovered
-                                                        }
-                                                    }
+                                                WindowButton {
+                                                    cell: cell
+                                                    mode: settings.buttonIncognito
+                                                    checked: window?.excludeFromCapture ?? false
+                                                    iconName: "view-private-symbolic"
+                                                    tooltipChecked: "Disable hide from capture [I]"
+                                                    tooltipUnchecked: "Hide from screenshots/recordings [I]"
+                                                    onToggled: window.excludeFromCapture = !window.excludeFromCapture
                                                 }
 
                                                 // Demands Attention Button
-                                                Loader {
-                                                    id: buttonDemandsAttention
-                                                    visible: buttonVisible(settings.buttonDemandsAttention, window?.demandsAttention)
-                                                    sourceComponent: buttonHighlight(settings.buttonDemandsAttention, window?.demandsAttention) ? buttonDemandsAttentionTrue : buttonDemandsAttentionFalse
-                                                    readonly property string _tooltip_text: window?.demandsAttention ? "Remove attention demand [N]" : "Demand attention [N]"
-
-                                                    Component {
-                                                        id: buttonDemandsAttentionTrue
-                                                        PlasmaComponents3.RoundButton {
-                                                            icon.name: "notifications-symbolic"
-                                                            onClicked: window.demandsAttention = !window.demandsAttention
-                                                            implicitWidth: buttonSize
-                                                            implicitHeight: buttonSize
-                                                            ToolTip.text: buttonDemandsAttention._tooltip_text
-                                                            ToolTip.visible: hovered
-                                                            layer.enabled: true
-                                                            layer.effect: MultiEffect {
-                                                                shadowEnabled: true
-                                                                shadowColor: Kirigami.Theme.neutralTextColor
-                                                                shadowBlur: 0.5
-                                                            }
-
-                                                            SequentialAnimation on opacity {
-                                                                loops: Animation.Infinite
-                                                                running: true
-                                                                NumberAnimation { to: 1.0; duration: 200 }
-                                                                NumberAnimation { to: 0.2; duration: 200 }
-                                                            }
-                                                        }
-                                                    }
-
-                                                    Component {
-                                                        id: buttonDemandsAttentionFalse
-                                                        PlasmaComponents3.Button {
-                                                            icon.name: "notifications-symbolic"
-                                                            onClicked: window.demandsAttention = !window.demandsAttention
-                                                            background.opacity: settings.opacityWindowButton
-                                                            implicitWidth: buttonSize
-                                                            implicitHeight: buttonSize
-                                                            ToolTip.text: buttonDemandsAttention._tooltip_text
-                                                            ToolTip.visible: hovered
-                                                        }
-                                                    }
+                                                WindowButton {
+                                                    cell: cell
+                                                    mode: settings.buttonDemandsAttention
+                                                    checked: window?.demandsAttention ?? false
+                                                    blink: true
+                                                    iconName: "notifications-symbolic"
+                                                    tooltipChecked: "Remove attention demand [N]"
+                                                    tooltipUnchecked: "Demand attention [N]"
+                                                    onToggled: window.demandsAttention = !window.demandsAttention
                                                 }
 
                                                 // Shaded Button
-                                                Loader {
-                                                    id: buttonShaded
-                                                    visible: (window?.shadeable || false) && buttonVisible(settings.buttonShaded, window?.shaded)
-                                                    sourceComponent: buttonHighlight(settings.buttonShaded, window?.shaded) ? buttonShadedTrue : buttonShadedFalse
-                                                    readonly property string _tooltip_text: window?.shaded ? "Unshade [S]" : "Shade [S]"
-
-                                                    Component {
-                                                        id: buttonShadedTrue
-                                                        PlasmaComponents3.RoundButton {
-                                                            icon.name: "window-shade-symbolic"
-                                                            onClicked: window.shaded = !window.shaded
-                                                            implicitWidth: buttonSize
-                                                            implicitHeight: buttonSize
-                                                            ToolTip.text: buttonShaded._tooltip_text
-                                                            ToolTip.visible: hovered
-                                                            layer.enabled: true
-                                                            layer.effect: MultiEffect {
-                                                                shadowEnabled: true
-                                                                shadowColor: Kirigami.Theme.neutralTextColor
-                                                                shadowBlur: 0.5
-                                                            }
-                                                        }
-                                                    }
-
-                                                    Component {
-                                                        id: buttonShadedFalse
-                                                        PlasmaComponents3.Button {
-                                                            icon.name: "window-shade-symbolic"
-                                                            onClicked: window.shaded = !window.shaded
-                                                            background.opacity: settings.opacityWindowButton
-                                                            implicitWidth: buttonSize
-                                                            implicitHeight: buttonSize
-                                                            ToolTip.text: buttonShaded._tooltip_text
-                                                            ToolTip.visible: hovered
-                                                        }
-                                                    }
+                                                WindowButton {
+                                                    cell: cell
+                                                    mode: settings.buttonShaded
+                                                    checked: window?.shaded ?? false
+                                                    supported: window?.shadeable ?? false
+                                                    iconName: "window-shade-symbolic"
+                                                    tooltipChecked: "Unshade [S]"
+                                                    tooltipUnchecked: "Shade [S]"
+                                                    onToggled: window.shaded = !window.shaded
                                                 }
 
                                                 // Opacity Toggle Button
-                                                Loader {
-                                                    id: buttonTransparency
-                                                    readonly property bool isTransparent: window ? (window.opacity < 1) : false
-                                                    visible: buttonVisible(settings.buttonTransparency, isTransparent)
-                                                    sourceComponent: buttonHighlight(settings.buttonTransparency, isTransparent) ? buttonTransparencyTrue : buttonTransparencyFalse
-                                                    readonly property string _tooltip_text: isTransparent ? "Make opaque [O]" : "Make transparent [O]"
-
-                                                    Component {
-                                                        id: buttonTransparencyTrue
-                                                        PlasmaComponents3.RoundButton {
-                                                            icon.name: "edit-opacity-symbolic"
-                                                            onClicked: window.opacity = isTransparent ? 1.0 : settings.opacityWindow
-                                                            implicitWidth: buttonSize
-                                                            implicitHeight: buttonSize
-                                                            ToolTip.text: buttonTransparency._tooltip_text
-                                                            ToolTip.visible: hovered
-                                                            layer.enabled: true
-                                                            layer.effect: MultiEffect {
-                                                                shadowEnabled: true
-                                                                shadowColor: Kirigami.Theme.neutralTextColor
-                                                                shadowBlur: 0.5
-                                                            }
-                                                        }
-                                                    }
-
-                                                    Component {
-                                                        id: buttonTransparencyFalse
-                                                        PlasmaComponents3.Button {
-                                                            icon.name: "edit-opacity-symbolic"
-                                                            onClicked: window.opacity = isTransparent ? 1.0 : settings.opacityWindow
-                                                            background.opacity: settings.opacityWindowButton
-                                                            implicitWidth: buttonSize
-                                                            implicitHeight: buttonSize
-                                                            ToolTip.text: buttonTransparency._tooltip_text
-                                                            ToolTip.visible: hovered
-                                                        }
-                                                    }
+                                                WindowButton {
+                                                    cell: cell
+                                                    mode: settings.buttonTransparency
+                                                    checked: isTransparent
+                                                    iconName: "edit-opacity-symbolic"
+                                                    tooltipChecked: "Make opaque [O]"
+                                                    tooltipUnchecked: "Make transparent [O]"
+                                                    onToggled: window.opacity = isTransparent ? 1.0 : settings.opacityWindow
                                                 }
 
                                                 // Skip Taskbar Button
-                                                Loader {
-                                                    id: buttonSkipTaskbar
-                                                    visible: buttonVisible(settings.buttonSkipTaskbar, window?.skipTaskbar)
-                                                    sourceComponent: buttonHighlight(settings.buttonSkipTaskbar, window?.skipTaskbar) ? buttonSkipTaskbarTrue : buttonSkipTaskbarFalse
-                                                    readonly property string _tooltip_text: window?.skipTaskbar ? "Show in taskbar [1]" : "Skip taskbar [1]"
-
-                                                    Component {
-                                                        id: buttonSkipTaskbarTrue
-                                                        PlasmaComponents3.RoundButton {
-                                                            icon.name: "view-tasks-all-symbolic"
-                                                            onClicked: window.skipTaskbar = !window.skipTaskbar
-                                                            implicitWidth: buttonSize
-                                                            implicitHeight: buttonSize
-                                                            ToolTip.text: buttonSkipTaskbar._tooltip_text
-                                                            ToolTip.visible: hovered
-                                                            layer.enabled: true
-                                                            layer.effect: MultiEffect {
-                                                                shadowEnabled: true
-                                                                shadowColor: Kirigami.Theme.neutralTextColor
-                                                                shadowBlur: 0.5
-                                                            }
-                                                        }
-                                                    }
-
-                                                    Component {
-                                                        id: buttonSkipTaskbarFalse
-                                                        PlasmaComponents3.Button {
-                                                            icon.name: "view-tasks-all-symbolic"
-                                                            onClicked: window.skipTaskbar = !window.skipTaskbar
-                                                            background.opacity: settings.opacityWindowButton
-                                                            implicitWidth: buttonSize
-                                                            implicitHeight: buttonSize
-                                                            ToolTip.text: buttonSkipTaskbar._tooltip_text
-                                                            ToolTip.visible: hovered
-                                                        }
-                                                    }
+                                                WindowButton {
+                                                    cell: cell
+                                                    mode: settings.buttonSkipTaskbar
+                                                    checked: window?.skipTaskbar ?? false
+                                                    iconName: "view-tasks-all-symbolic"
+                                                    tooltipChecked: "Show in taskbar [1]"
+                                                    tooltipUnchecked: "Skip taskbar [1]"
+                                                    onToggled: window.skipTaskbar = !window.skipTaskbar
                                                 }
 
-                                                 // Skip Switcher Button
-                                                Loader {
-                                                    id: buttonSkipSwitcher
-                                                    visible: buttonVisible(settings.buttonSkipSwitcher, window?.skipSwitcher)
-                                                    sourceComponent: buttonHighlight(settings.buttonSkipSwitcher, window?.skipSwitcher) ? buttonSkipSwitcherTrue : buttonSkipSwitcherFalse
-                                                    readonly property string _tooltip_text: window?.skipSwitcher ? "Show in switcher [2]" : "Skip switcher [2]"
-
-                                                    Component {
-                                                        id: buttonSkipSwitcherTrue
-                                                        PlasmaComponents3.RoundButton {
-                                                            icon.name: "window-list"
-                                                            onClicked: window.skipSwitcher = !window.skipSwitcher
-                                                            implicitWidth: buttonSize
-                                                            implicitHeight: buttonSize
-                                                            ToolTip.text: buttonSkipSwitcher._tooltip_text
-                                                            ToolTip.visible: hovered
-                                                            layer.enabled: true
-                                                            layer.effect: MultiEffect {
-                                                                shadowEnabled: true
-                                                                shadowColor: Kirigami.Theme.neutralTextColor
-                                                                shadowBlur: 0.5
-                                                            }
-                                                        }
-                                                    }
-
-                                                    Component {
-                                                        id: buttonSkipSwitcherFalse
-                                                        PlasmaComponents3.Button {
-                                                            icon.name: "window-list"
-                                                            onClicked: window.skipSwitcher = !window.skipSwitcher
-                                                            background.opacity: settings.opacityWindowButton
-                                                            implicitWidth: buttonSize
-                                                            implicitHeight: buttonSize
-                                                            ToolTip.text: buttonSkipSwitcher._tooltip_text
-                                                            ToolTip.visible: hovered
-                                                        }
-                                                    }
+                                                // Skip Switcher Button
+                                                WindowButton {
+                                                    cell: cell
+                                                    mode: settings.buttonSkipSwitcher
+                                                    checked: window?.skipSwitcher ?? false
+                                                    iconName: "window-list"
+                                                    tooltipChecked: "Show in switcher [2]"
+                                                    tooltipUnchecked: "Skip switcher [2]"
+                                                    onToggled: window.skipSwitcher = !window.skipSwitcher
                                                 }
 
                                                 // Skip Pager Button
-                                                Loader {
-                                                    id: buttonSkipPager
-                                                    visible: buttonVisible(settings.buttonSkipPager, window?.skipPager)
-                                                    sourceComponent: buttonHighlight(settings.buttonSkipPager, window?.skipPager) ? buttonSkipPagerTrue : buttonSkipPagerFalse
-                                                    readonly property string _tooltip_text: window?.skipPager ? "Show in pager [3]" : "Skip pager [3]"
-
-                                                    Component {
-                                                        id: buttonSkipPagerTrue
-                                                        PlasmaComponents3.RoundButton {
-                                                            icon.name: "window-duplicate-symbolic"
-                                                            onClicked: window.skipPager = !window.skipPager
-                                                            implicitWidth: buttonSize
-                                                            implicitHeight: buttonSize
-                                                            ToolTip.text: buttonSkipPager._tooltip_text
-                                                            ToolTip.visible: hovered
-                                                            layer.enabled: true
-                                                            layer.effect: MultiEffect {
-                                                                shadowEnabled: true
-                                                                shadowColor: Kirigami.Theme.neutralTextColor
-                                                                shadowBlur: 0.5
-                                                            }
-                                                        }
-                                                    }
-
-                                                    Component {
-                                                        id: buttonSkipPagerFalse
-                                                        PlasmaComponents3.Button {
-                                                            icon.name: "window-duplicate-symbolic"
-                                                            onClicked: window.skipPager = !window.skipPager
-                                                            background.opacity: settings.opacityWindowButton
-                                                            implicitWidth: buttonSize
-                                                            implicitHeight: buttonSize
-                                                            ToolTip.text: buttonSkipPager._tooltip_text
-                                                            ToolTip.visible: hovered
-                                                        }
-                                                    }
+                                                WindowButton {
+                                                    cell: cell
+                                                    mode: settings.buttonSkipPager
+                                                    checked: window?.skipPager ?? false
+                                                    iconName: "window-duplicate-symbolic"
+                                                    tooltipChecked: "Show in pager [3]"
+                                                    tooltipUnchecked: "Skip pager [3]"
+                                                    onToggled: window.skipPager = !window.skipPager
                                                 }
                                             }
 
@@ -1473,171 +1135,55 @@ KWin.TabBoxSwitcher {
                                                 }
 
                                                 // Maximize/Restore Button
-                                                Loader {
-                                                    id: buttonMaximize
-                                                    visible: (window?.maximizable || false) && buttonVisible(settings.buttonMaximize, isMaximized)
-                                                    sourceComponent: buttonHighlight(settings.buttonMaximize, isMaximized) ? buttonMaximizeTrue : buttonMaximizeFalse
-                                                    readonly property string _tooltip_text: isMaximized ? "Unmaximize [PgUp]" : "Maximize [PgUp]"
-
-                                                    Component {
-                                                        id: buttonMaximizeTrue
-                                                        PlasmaComponents3.RoundButton {
-                                                            icon.name: (isMaximized && hovered) ? "window-restore-symbolic" : "window-maximize-symbolic"
-                                                            onClicked: if (window) {
-                                                                window.setMaximize(!isMaximized, !isMaximized)
-                                                            }
-                                                            implicitWidth: buttonSize
-                                                            implicitHeight: buttonSize
-                                                            ToolTip.text: buttonMaximize._tooltip_text
-                                                            ToolTip.visible: hovered
-                                                            layer.enabled: true
-                                                            layer.effect: MultiEffect {
-                                                                shadowEnabled: true
-                                                                shadowColor: Kirigami.Theme.neutralTextColor
-                                                                shadowBlur: 0.5
-                                                            }
-                                                        }
-                                                    }
-
-                                                    Component {
-                                                        id: buttonMaximizeFalse
-                                                        PlasmaComponents3.Button {
-                                                            icon.name: (isMaximized && hovered) ? "window-restore-symbolic" : "window-maximize-symbolic"
-                                                            onClicked: if (window) {
-                                                                window.setMaximize(!isMaximized, !isMaximized)
-                                                            }
-                                                            background.opacity: settings.opacityWindowButton
-                                                            implicitWidth: buttonSize
-                                                            implicitHeight: buttonSize
-                                                            ToolTip.text: buttonMaximize._tooltip_text
-                                                            ToolTip.visible: hovered
-                                                        }
-                                                    }
+                                                WindowButton {
+                                                    cell: cell
+                                                    mode: settings.buttonMaximize
+                                                    checked: isMaximized
+                                                    supported: window?.maximizable ?? false
+                                                    iconName: "window-maximize-symbolic"
+                                                    iconNameChecked: "window-restore-symbolic"
+                                                    tooltipChecked: "Unmaximize [PgUp]"
+                                                    tooltipUnchecked: "Maximize [PgUp]"
+                                                    onToggled: if (window) window.setMaximize(!isMaximized, !isMaximized)
                                                 }
 
                                                 // Maximize Horizontal Button
-                                                Loader {
-                                                    id: buttonMaximizeHorizontal
-                                                    visible: (window?.maximizable || false) && buttonVisible(settings.buttonMaximizeHorizontal, isMaximizedHorizontal)
-                                                    sourceComponent: buttonHighlight(settings.buttonMaximizeHorizontal, isMaximizedHorizontal) ? buttonMaximizeHorizontalTrue : buttonMaximizeHorizontalFalse
-                                                    readonly property string _tooltip_text: isMaximizedHorizontal ? "Unmaximize horizontally [End]" : "Maximize horizontally [End]"
-
-                                                    Component {
-                                                        id: buttonMaximizeHorizontalTrue
-                                                        PlasmaComponents3.RoundButton {
-                                                            icon.name: "window-maximize-symbolic"
-                                                            onClicked: if (window) {
-                                                                window.setMaximize(false, !isMaximizedHorizontal)
-                                                            }
-                                                            implicitWidth: buttonSize
-                                                            implicitHeight: buttonSize
-                                                            ToolTip.text: buttonMaximizeHorizontal._tooltip_text
-                                                            ToolTip.visible: hovered
-                                                            layer.enabled: true
-                                                            layer.effect: MultiEffect {
-                                                                shadowEnabled: true
-                                                                shadowColor: Kirigami.Theme.neutralTextColor
-                                                                shadowBlur: 0.5
-                                                            }
-                                                        }
-                                                    }
-
-                                                    Component {
-                                                        id: buttonMaximizeHorizontalFalse
-                                                        PlasmaComponents3.Button {
-                                                            icon.name: "window-maximize-symbolic"
-                                                            onClicked: if (window) {
-                                                                window.setMaximize(false, !isMaximizedHorizontal)
-                                                            }
-                                                            background.opacity: settings.opacityWindowButton
-                                                            implicitWidth: buttonSize
-                                                            implicitHeight: buttonSize
-                                                            ToolTip.text: buttonMaximizeHorizontal._tooltip_text
-                                                            ToolTip.visible: hovered
-                                                        }
-                                                    }
+                                                WindowButton {
+                                                    cell: cell
+                                                    mode: settings.buttonMaximizeHorizontal
+                                                    checked: isMaximizedHorizontal
+                                                    supported: window?.maximizable ?? false
+                                                    iconName: "transform-move-horizontal-symbolic"
+                                                    tooltipChecked: "Unmaximize horizontally [End]"
+                                                    tooltipUnchecked: "Maximize horizontally [End]"
+                                                    // setMaximize takes (vertically, horizontally)
+                                                    onToggled: if (window) window.setMaximize(isMaximizedVertical, !isMaximizedHorizontal)
                                                 }
 
                                                 // Maximize Vertical Button
-                                                Loader {
-                                                    id: buttonMaximizeVertical
-                                                    visible: (window?.maximizable || false) && buttonVisible(settings.buttonMaximizeVertical, isMaximizedVertical)
-                                                    sourceComponent: buttonHighlight(settings.buttonMaximizeVertical, isMaximizedVertical) ? buttonMaximizeVerticalTrue : buttonMaximizeVerticalFalse
-                                                    readonly property string _tooltip_text: isMaximizedVertical ? "Unmaximize vertically [Home]" : "Maximize vertically [Home]"
-
-                                                    Component {
-                                                        id: buttonMaximizeVerticalTrue
-                                                        PlasmaComponents3.RoundButton {
-                                                            icon.name: "window-maximize-symbolic"
-                                                            onClicked: if (window) {
-                                                                window.setMaximize(!isMaximizedVertical, false)
-                                                            }
-                                                            implicitWidth: buttonSize
-                                                            implicitHeight: buttonSize
-                                                            ToolTip.text: buttonMaximizeVertical._tooltip_text
-                                                            ToolTip.visible: hovered
-                                                            layer.enabled: true
-                                                            layer.effect: MultiEffect {
-                                                                shadowEnabled: true
-                                                                shadowColor: Kirigami.Theme.neutralTextColor
-                                                                shadowBlur: 0.5
-                                                            }
-                                                        }
-                                                    }
-
-                                                    Component {
-                                                        id: buttonMaximizeVerticalFalse
-                                                        PlasmaComponents3.Button {
-                                                            icon.name: "window-maximize-symbolic"
-                                                            onClicked: if (window) {
-                                                                window.setMaximize(!isMaximizedVertical, false)
-                                                            }
-                                                            background.opacity: settings.opacityWindowButton
-                                                            implicitWidth: buttonSize
-                                                            implicitHeight: buttonSize
-                                                            ToolTip.text: buttonMaximizeVertical._tooltip_text
-                                                            ToolTip.visible: hovered
-                                                        }
-                                                    }
+                                                WindowButton {
+                                                    cell: cell
+                                                    mode: settings.buttonMaximizeVertical
+                                                    checked: isMaximizedVertical
+                                                    supported: window?.maximizable ?? false
+                                                    iconName: "transform-move-vertical-symbolic"
+                                                    tooltipChecked: "Unmaximize vertically [Home]"
+                                                    tooltipUnchecked: "Maximize vertically [Home]"
+                                                    // setMaximize takes (vertically, horizontally)
+                                                    onToggled: if (window) window.setMaximize(!isMaximizedVertical, isMaximizedHorizontal)
                                                 }
 
                                                 // Minimize/Restore Button
-                                                Loader {
-                                                    id: minRestoreButton
-                                                    visible: (window?.minimizable || false) && buttonVisible(settings.buttonMinimize, window?.minimized)
-                                                    sourceComponent: buttonHighlight(settings.buttonMinimize, window?.minimized) ? minRestoreTrue : minRestoreFalse
-                                                    readonly property string _tooltip_text: window?.minimized ? "Unminimize [PgDn]" : "Minimize [PgDn]"
-
-                                                    Component {
-                                                        id: minRestoreTrue
-                                                        PlasmaComponents3.RoundButton {
-                                                            icon.name: (window?.minimized && hovered) ? "window-restore-symbolic" : "window-minimize-symbolic"
-                                                            onClicked: window.minimized = !window.minimized
-                                                            implicitWidth: buttonSize
-                                                            implicitHeight: buttonSize
-                                                            ToolTip.text: minRestoreButton._tooltip_text
-                                                            ToolTip.visible: hovered
-                                                            layer.enabled: true
-                                                            layer.effect: MultiEffect {
-                                                                shadowEnabled: true
-                                                                shadowColor: Kirigami.Theme.neutralTextColor
-                                                                shadowBlur: 0.5
-                                                            }
-                                                        }
-                                                    }
-
-                                                    Component {
-                                                        id: minRestoreFalse
-                                                        PlasmaComponents3.Button {
-                                                            icon.name: (window?.minimized && hovered) ? "window-restore-symbolic" : "window-minimize-symbolic"
-                                                            onClicked: window.minimized = !window.minimized
-                                                            background.opacity: settings.opacityWindowButton
-                                                            implicitWidth: buttonSize
-                                                            implicitHeight: buttonSize
-                                                            ToolTip.text: minRestoreButton._tooltip_text
-                                                            ToolTip.visible: hovered
-                                                        }
-                                                    }
+                                                WindowButton {
+                                                    cell: cell
+                                                    mode: settings.buttonMinimize
+                                                    checked: window?.minimized ?? false
+                                                    supported: window?.minimizable ?? false
+                                                    iconName: "window-minimize-symbolic"
+                                                    iconNameChecked: "window-restore-symbolic"
+                                                    tooltipChecked: "Unminimize [PgDn]"
+                                                    tooltipUnchecked: "Minimize [PgDn]"
+                                                    onToggled: window.minimized = !window.minimized
                                                 }
 
                                                 // Debug Button
@@ -2193,13 +1739,19 @@ KWin.TabBoxSwitcher {
                             id: windowButtonsLabel
                             textFormat: Text.RichText
                             text: "Window<sup>?</sup><br>buttons"
-                            ToolTip.text: "Configure the visibility of window management buttons on each thumbnail.\n\n" +
-                                          "Each button can be set to one of the following modes:\n" +
-                                          "- Off: the button is never shown.\n" +
-                                          "- On: the button is shown when hovered/selected or when its state is active, and highlighted (round, with shadow) when active.\n" +
-                                          "- On (no highlight): the button is shown when hovered/selected (no highlight).\n" +
-                                          "- On (basic highlight): the button is shown when hovered/selected or when its state is active, but never uses the round highlighted style.\n" +
-                                          "- On (active only): the button is only shown when its state is active, and highlighted (round, with shadow)."
+                            ToolTip.text: "Configure when window management buttons appear on each thumbnail, and in which style.\n\n" +
+                                          "Two styles are used:\n" +
+                                          "- button: the normal flat style.\n" +
+                                          "- badge: round, with a shadow, marking the button's state as active.\n\n" +
+                                          "\"active\" means the window state the button toggles is on (e.g. the window is already pinned); " +
+                                          "\"hover\" means the thumbnail is hovered or selected.\n\n" +
+                                          "The number in each mode's name is the value stored in the config file.\n\n" +
+                                          "- 0 Off: never shown.\n" +
+                                          "- 1 Button on hover, badge when active: always visible while active (as a badge), and on hover (as a button).\n" +
+                                          "- 2 Button on hover, badge when active & hovered: same, except an active button only turns into a badge on hover.\n" +
+                                          "- 3 Button on hover + when active: always visible while active, and on hover, but never as a badge.\n" +
+                                          "- 4 Button on hover: only visible on hover, never as a badge.\n" +
+                                          "- 5 Badge when active only: only visible while active, always as a badge."
                             ToolTip.visible: maWindowButtons.containsMouse
                             MouseArea { id: maWindowButtons; anchors.fill: parent; hoverEnabled: true; }
                         }

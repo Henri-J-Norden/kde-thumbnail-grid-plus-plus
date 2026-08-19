@@ -199,6 +199,9 @@ KWin.TabBoxSwitcher {
             checked: tabBox.showSettings
             onCheckedChanged: tabBox.showSettings = checked
             visible: settings.showSettingsButton && tabBox.animationFinished
+            PlasmaComponents3.ToolTip.text: i18n("Settings [F2]")
+            PlasmaComponents3.ToolTip.visible: hovered
+            PlasmaComponents3.ToolTip.delay: Kirigami.Units.toolTipDelay
         }
 
         Item {
@@ -511,6 +514,8 @@ KWin.TabBoxSwitcher {
                                 + " --group General --key TerminalApplication 2>/dev/null)}\";"
                                 + " \"${term:-konsole}\" -e htop -p " + window.pid)
                         }
+                    } else if (key === Qt.Key_F2) {
+                        tabBox.showSettings = !tabBox.showSettings
                     } else if (key === Qt.Key_F12) {
                         var caption = tabBox.model.data(idx, captionRole)
                         executableSource.showDebugInfo(window, caption)

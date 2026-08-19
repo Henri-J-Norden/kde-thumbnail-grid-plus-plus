@@ -33,6 +33,13 @@ FocusScope {
     width: settingsItem.implicitWidth
     height: settingsItem.implicitHeight
 
+    Keys.onPressed: (event) => {
+        if (event.key === Qt.Key_F2) {
+            tabBox.showSettings = false
+            event.accepted = true
+        }
+    }
+
     Item {
         id: settingsItem
         implicitWidth: Kirigami.Units.gridUnit * 60

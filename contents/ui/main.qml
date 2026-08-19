@@ -30,6 +30,41 @@ KWin.TabBoxSwitcher {
         return win ? /X11Window/.test(String(win)) : false
     }
 
+    function parseAspectRatio(input) {
+        const s = (input || "").trim()
+        if (!s) return 0
+        if (s.includes(":")) {
+            const parts = s.split(":")
+            if (parts.length === 2) {
+                const x = parseFloat(parts[0])
+                const y = parseFloat(parts[1])
+                if (!isNaN(x) && !isNaN(y) && x > 0 && y > 0)
+                    return x / y
+            }
+            return 0
+        }
+        const v = parseFloat(s)
+        return (!isNaN(v) && v > 0) ? v : 0
+    }
+
+    function toFractionString(value) {
+        if (value <= 0) return "0"
+        const tolerance = 0.005
+        let bestN = 0, bestD = 1
+        for (let d = 1; d <= 30; ++d) {
+            const n = Math.round(value * d)
+            if (n > 50) continue
+            if (d > 0 && Math.abs(n / d - value) < tolerance) {
+                bestN = n
+                bestD = d
+                break
+            }
+        }
+        if (bestN > 0)
+            return bestN + ":" + bestD
+        return value.toFixed(2)
+    }
+
     Settings {
         id: settings
         category: tabBox.isAlternative ? "Alt" : "Main"
@@ -41,7 +76,7 @@ KWin.TabBoxSwitcher {
         property real backgroundOpacity: 0.5
         property real thumbnailOpacity: 1.0
         property int previewRepeatCount: 1
-        property int maxWidth: 0
+        property string maxGridAspectRatioInput: "21:9"
         property bool minimizedItalics: true
         property bool minimizedDesaturate: true
         property bool minimizedBlur: true
@@ -94,7 +129,7 @@ KWin.TabBoxSwitcher {
 
         MouseArea {
             anchors.fill: parent
-            onClicked: tabBox.model.activate(0)
+            onClicked: isPreview ? wrapper.close() : tabBox.model.activate(0)
         }
 
         PlasmaComponents3.Button {
@@ -445,7 +480,12 @@ KWin.TabBoxSwitcher {
                 // Calculate max dimensions
                 //-- Layout Logic --
                 // Calculate max dimensions
-                property int maxW: Math.min((settings.maxWidth > 0 ? settings.maxWidth : Infinity), tabBox.screenGeometry.width) * 0.9
+                readonly property real maxGridAspectRatioValue: tabBox.parseAspectRatio(settings.maxGridAspectRatioInput)
+                property int maxW: {
+                    const ratio = maxGridAspectRatioValue
+                    const cap = ratio > 0 ? Math.min(ratio * maxH, tabBox.screenGeometry.width) : tabBox.screenGeometry.width
+                    return cap * 0.9
+                }
                 property int maxH: tabBox.screenGeometry.height * 0.8
                 
                 // Greedy Algorithm from original Thumbnail Grid to balance rows/cols
@@ -1105,48 +1145,96 @@ KWin.TabBoxSwitcher {
                     RowLayout {
                         Layout.fillWidth: true
                         PlasmaComponents3.CheckBox {
-                            text: "Select with mouse hover"
+                            id: cbHoverSelection
                             checked: settings.hoverSelection
                             onCheckedChanged: settings.hoverSelection = checked
                         }
+                        PlasmaComponents3.Label {
+                            textFormat: Text.RichText
+                            text: "Select with mouse hover<sup>?</sup>"
+                            ToolTip {
+                                text: "Useful when \"Show selected windows\" (in Task Switcher - System Setting) is enabled, " +
+                                      "to preview a window by just hovering on it in the grid (with the mouse cursor). \n\n" + 
+                                      "Note: regardless of this setting, you can always: \n" +
+                                      "- Click on a window to switch to it. \n" +
+                                      "- Cancel task switching by clicking outside the grid or by pressing [Esc] on the keyboard."
+                                visible: ma3.containsMouse
+                                delay: 0
+                                width: 480
+                            }
+                            MouseArea { id: ma3; anchors.fill: parent; hoverEnabled: true; onClicked: cbHoverSelection.toggle() }
+                        }
                         Item { Layout.fillWidth: true }
                         PlasmaComponents3.CheckBox {
-                            text: "Show windowing protocol"
+                            id: cbShowProtocol
                             checked: settings.showProtocol
                             onCheckedChanged: settings.showProtocol = checked
                         }
+                        PlasmaComponents3.Label {
+                            textFormat: Text.RichText
+                            text: "Show windowing protocol<sup>?</sup>"
+                            ToolTip.text: "Display the windowing protocol (Wayland or X11) next to each window's icon."
+                            ToolTip.visible: ma4.containsMouse
+                            MouseArea { id: ma4; anchors.fill: parent; hoverEnabled: true; onClicked: cbShowProtocol.toggle() }
+                        }
                         Item { Layout.fillWidth: true }
                         PlasmaComponents3.CheckBox {
-                            text: "Settings button"
+                            id: cbButtonSettings
                             checked: settings.buttonSettings
                             onCheckedChanged: settings.buttonSettings = checked
                         }
+                        PlasmaComponents3.Label {
+                            textFormat: Text.RichText
+                            text: "Settings button<sup>?</sup>"
+                            ToolTip.text: "Show a settings button (at the bottom left of the screen), when the task switcher is opened."
+                            ToolTip.visible: ma5.containsMouse
+                            MouseArea { id: ma5; anchors.fill: parent; hoverEnabled: true; onClicked: cbButtonSettings.toggle() }
+                        }
                     }
 
                     RowLayout {
                         Layout.fillWidth: true
-                        PlasmaComponents3.Label { text: "Max width:" }
+                        PlasmaComponents3.Label {
+                            textFormat: Text.RichText
+                            text: "Max grid aspect ratio<sup>?</sup>"
+                            ToolTip {
+                                text: "Limits how wide the grid of windows can be relative to its height. \n" +
+                                      "Useful for ultrawide displays, to prevent the task switcher from becoming too wide. \n\n" +
+                                      "E.g. 21:9 means that: \n" +
+                                      "- on monitors wider than 21:9, the grid will stay within a central 21:9 rectangle, \n" +
+                                      "- on monitors narrower than 21:9, the limit is the width of the monitor. \n\n" +
+                                      "Set to 0 for no limit (always uses the width of the monitor as the limit). \n\n" + 
+                                      "Note: you can test the effect of this setting by increasing \"Preview repeat count\"."
+                                visible: ma1.containsMouse
+                                delay: 0
+                                width: 480
+                            }
+                            MouseArea { id: ma1; anchors.fill: parent; hoverEnabled: true; }
+                        }
                         PlasmaComponents3.Slider {
-                            id: maxWidthSlider
-                            from: 0
-                            to: tabBox.screenGeometry.width
-                            value: Math.min(settings.maxWidth, tabBox.screenGeometry.width)
-                            stepSize: 1
-                            onMoved: settings.maxWidth = Math.round(value)
+                            id: maxAspectRatioSlider
+                            from: 0.0
+                            to: 5.0
+                            stepSize: 0.01
+                            value: Math.max(0, Math.min(5, dialogMainItem.maxGridAspectRatioValue))
+                            onMoved: settings.maxGridAspectRatioInput = tabBox.toFractionString(value)
                             Layout.fillWidth: true
                         }
-                        PlasmaComponents3.SpinBox {
-                            from: 0
-                            to: 99999
-                            value: settings.maxWidth
-                            onValueModified: settings.maxWidth = value
+                        PlasmaComponents3.TextField {
+                            text: settings.maxGridAspectRatioInput
+                            onTextEdited: settings.maxGridAspectRatioInput = text
                         }
-                        PlasmaComponents3.Label { text: "px" }
                     }
 
                     RowLayout {
                         Layout.fillWidth: true
-                        PlasmaComponents3.Label { text: "Minimized windows:" }
+                        PlasmaComponents3.Label {
+                            textFormat: Text.RichText
+                            text: "Minimized windows<sup>?</sup>:"
+                            ToolTip.text: "Change the appearance of windows that are minimized."
+                            ToolTip.visible: ma2.containsMouse
+                            MouseArea { id: ma2; anchors.fill: parent; hoverEnabled: true; }
+                        }
                         PlasmaComponents3.CheckBox {
                             text: "Italics text"
                             checked: settings.minimizedItalics

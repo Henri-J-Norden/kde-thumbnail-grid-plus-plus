@@ -123,6 +123,63 @@ KWin.TabBoxSwitcher {
         property bool buttonDebug: false
     }
 
+    // Defaults for SettingsPanel's "differs from defaults" count and its Restore
+    // defaults button. QtCore.Settings has no API for a property's initialiser
+    // once it has been overwritten from disk, so this has to mirror the block
+    // above by hand; keep the two in sync when adding a setting.
+    readonly property var settingsDefaults: ({
+        hoverSelection: true,
+        showSettingsButton: true,
+        showProtocol: true,
+        lockGridWidth: true,
+        centerHighlightButtons: true,
+
+        thumbnailWidthGridUnits: 16,
+        thumbnailHeightInput: "16:10",
+        maxGridAspectRatioInput: "21:9",
+
+        previewRepeatCount: 1,
+        buttonSize: 1.6,
+
+        opacityBackground: 0.5,
+        opacityThumbnail: 1.0,
+        opacityWindowButton: 0.75,
+        opacityWindow: 0.7,
+
+        iconSizeIndex: 4,
+
+        minimizedItalics: 1,
+        minimizedBlur: 2,
+        minimizedContrast: 1,
+        minimizedThumbnailOpacity: 0,
+        minimizedThumbnailScale: 0,
+        minimizedThumbnailRotation: 2,
+        minimizedIconOpacity: 1,
+        minimizedStrikethrough: 0,
+        minimizedUnderline: 0,
+        minimizedIcon: 0,
+
+        buttonMaximize: 2,
+        buttonMaximizeHorizontal: 0,
+        buttonMaximizeVertical: 0,
+        buttonFullscreen: 1,
+        buttonNoBorder: 1,
+        buttonMinimize: 2,
+        buttonPin: 1,
+        buttonKeepAbove: 1,
+        buttonKeepBelow: 5,
+        buttonIncognito: 5,
+        buttonDemandsAttention: 5,
+        buttonShaded: 5,
+        buttonTransparency: 5,
+        buttonSkipTaskbar: 5,
+        buttonSkipPager: 5,
+        buttonSkipSwitcher: 5,
+
+        buttonClose: true,
+        buttonDebug: false
+    })
+
     // Labels for the mode settings above. Deliberately not declared inside Settings:
     // it would serialise them into the config file as if they were user values.
     // The index is what gets stored, so these lists must not be reordered without
@@ -152,10 +209,44 @@ KWin.TabBoxSwitcher {
     property bool showSettings: false
     property bool animationFinished: false
 
+    // Guards the popup <-> window handover below: one host is closed before the
+    // other opens, and without this that close would clear `showSettings`.
+    property bool movingSettings: false
+
+    // Keeps exactly one settings host open: the popup while the switcher is on
+    // screen (a real window would stack behind KWin's overlay), the standalone
+    // window once the switcher is gone. Same split as editPopup/editWindow.
+    function updateSettingsHost() {
+        const wantPopup = showPreview && wrapper.visible
+        const wantWindow = showPreview && !wrapper.visible
+
+        movingSettings = true
+        if (!wantPopup && settingsPopup.opened) {
+            if (wantWindow)
+                settingsWindowContent.adoptStateFrom(settingsPopup)
+            settingsPopup.close()
+        }
+        if (!wantWindow && settingsWindow.visible) {
+            if (wantPopup)
+                settingsPopup.adoptStateFrom(settingsWindowContent)
+            settingsWindow.close()
+        }
+        // The panel sets `focus: true`, so opening hands it the keyboard.
+        if (wantPopup && !settingsPopup.opened)
+            settingsPopup.open()
+        if (wantWindow && !settingsWindow.visible) {
+            settingsWindowContent.open()
+            settingsWindow.show()
+            settingsWindow.x = tabBox.screenGeometry.x
+            settingsWindow.y = tabBox.screenGeometry.y
+            settingsWindow.requestActivate()
+        }
+        movingSettings = false
+    }
+
     onShowPreviewChanged: {
-        if (showPreview)
-            settingsWnd.forceActiveFocus()
-        else
+        updateSettingsHost()
+        if (!showPreview)
             dialogMainItem.forceActiveFocus()
     }
 
@@ -180,6 +271,8 @@ KWin.TabBoxSwitcher {
             // Latch after the model has populated for this invocation.
             if (visible && settings.lockGridWidth)
                 Qt.callLater(() => dialogMainItem.lockedColumns = dialogMainItem.columns)
+            // The settings panel follows the switcher between its two hosts.
+            tabBox.updateSettingsHost()
         }
         color: "transparent"
         width: tabBox.screenGeometry.width
@@ -191,6 +284,7 @@ KWin.TabBoxSwitcher {
         }
 
         PlasmaComponents3.Button {
+            id: settingsButton
             anchors.left: parent.left
             anchors.bottom: parent.bottom
             anchors.margins: Kirigami.Units.largeSpacing
@@ -1041,19 +1135,71 @@ KWin.TabBoxSwitcher {
             }
         }
 
+        // Left screen edge, full height. Draggable and resizable from there.
         SettingsPanel {
-            id: settingsWnd
-            visible: tabBox.showPreview
+            id: settingsPopup
 
             cfg: settings
+            defaults: tabBox.settingsDefaults
             effectModeModel: tabBox.effectModeModel
             buttonModeModel: tabBox.buttonModeModel
             isPreview: tabBox.isPreview
             toFractionString: tabBox.toFractionString
             maxGridAspectRatio: dialogMainItem.maxGridAspectRatioValue
 
+            x: 0
             y: 0
-            anchors.horizontalCenter: parent.horizontalCenter
+            // Initial size only; the resize grip takes over from here.
+            // End above the settings button so it stays clickable.
+            Component.onCompleted: height = wrapper.height
+                                   - settingsButton.height
+                                   - Kirigami.Units.largeSpacing * 2
+
+            onResetPosition: {
+                settingsPopup.x = 0
+                settingsPopup.y = 0
+                settingsPopup.height = wrapper.height
+                                       - settingsButton.height
+                                       - Kirigami.Units.largeSpacing * 2
+            }
+            onClosed: if (!settingsWindow.visible) tabBox.showSettings = false
+        }
+    }
+
+    // The same panel once the switcher is gone, so settings opened during
+    // alt-tab stay open and editable afterwards.
+    Window {
+        id: settingsWindow
+        visible: false
+        flags: Qt.Window | Qt.WindowStaysOnTopHint
+        color: Kirigami.Theme.backgroundColor
+        title: "Thumbnail Grid ++ — " + settings.category + " profile"
+        width: Kirigami.Units.gridUnit * 46
+        height: tabBox.screenGeometry.height
+
+        onClosing: if (!tabBox.movingSettings) tabBox.showSettings = false
+
+        SettingsPanel {
+            id: settingsWindowContent
+            showChrome: false
+            x: 0
+            y: 0
+            width: parent.width
+            height: parent.height
+
+            cfg: settings
+            defaults: tabBox.settingsDefaults
+            effectModeModel: tabBox.effectModeModel
+            buttonModeModel: tabBox.buttonModeModel
+            isPreview: tabBox.isPreview
+            toFractionString: tabBox.toFractionString
+            maxGridAspectRatio: dialogMainItem.maxGridAspectRatioValue
+
+            onResetPosition: {
+                settingsWindow.x = tabBox.screenGeometry.x
+                settingsWindow.y = tabBox.screenGeometry.y
+            }
+            onClosed: settingsWindow.close()
         }
     }
 

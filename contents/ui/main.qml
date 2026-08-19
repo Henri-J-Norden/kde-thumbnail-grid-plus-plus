@@ -459,6 +459,12 @@ KWin.TabBoxSwitcher {
                     }
                 }
 
+                EditPopup {
+                    id: editPopup
+                    screenW: tabBox.screenGeometry.width
+                    screenH: tabBox.screenGeometry.height
+                }
+
                 // Opaque backing to match original opaque look
                 Rectangle {
                     anchors.fill: parent
@@ -634,6 +640,23 @@ KWin.TabBoxSwitcher {
                     return delegateItem.mapToItem(dialogMainItem, 0, delegateItem.height)
                 }
 
+                function delegatePositionForWindow(win) {
+                    if (!win) return null
+                    const innerRep = repeater.itemAt(0)
+                    if (!innerRep) return null
+                    for (let i = 0; i < innerRep.count; i++) {
+                        const item = innerRep.itemAt(i)
+                        if (!item) continue
+                        const idx = tabBox.model.index(i, 0)
+                        const wid = tabBox.model.data(idx, windowIdRole)
+                        const w = (KWin.Workspace?.stackingOrder || []).find(w => w.internalId === wid)
+                        if (w && w.internalId === win.internalId) {
+                            return item.mapToItem(dialogMainItem, 0, item.height)
+                        }
+                    }
+                    return null
+                }
+
                 function reopenCopyMenu() {
                     if (!copyMenu.sticky) return
                     const win = currentWindow()
@@ -693,6 +716,8 @@ KWin.TabBoxSwitcher {
                         }
                     } else if (key === Qt.Key_Space) {
                         if (window) copyMenu.show(window, currentDelegatePosition())
+                    } else if (key === Qt.Key_E) {
+                        if (window) editPopup.openFor(window, currentDelegatePosition())
                     } else if (key === Qt.Key_H) {
                         if (window?.pid) {
                             // $TERMINAL overrides the terminal configured in KDE
@@ -732,8 +757,36 @@ KWin.TabBoxSwitcher {
                     function onVisibleChanged() {
                         copyMenu.dismiss()
                         tabBox.animationFinished = false
+                        console.log("[EDIT] tabBox.onVisibleChanged visible=" + tabBox.visible
+                            + " editWindow.visible=" + editWindow.visible
+                            + " editWindowContent.targetWindow=" + (editWindowContent.targetWindow ? editWindowContent.targetWindow.caption : "null")
+                            + " editPopup.visible=" + editPopup.visible
+                            + " editPopup.targetWindow=" + (editPopup.targetWindow ? editPopup.targetWindow.caption : "null"))
                         if (tabBox.visible) {
                             armTimer.start()
+                            if (editWindow.visible && editWindowContent.targetWindow) {
+                                const win = editWindowContent.targetWindow
+                                const origGeo = editWindowContent.originalGeometry
+                                const origOpacity = editWindowContent.originalOpacity
+                                editWindow.close()
+                                console.log("[EDIT] transferring Window→Popup for " + win.caption)
+                                editPopup.openFor(win, dialogMainItem.delegatePositionForWindow(win), origGeo, origOpacity)
+                            }
+                        } else {
+                            if (editPopup.targetWindow) {
+                                const win = editPopup.targetWindow
+                                const origGeo = editPopup.originalGeometry
+                                const origOpacity = editPopup.originalOpacity
+                                console.log("[EDIT] transferring Popup→Window for " + win.caption
+                                    + " origGeo=" + JSON.stringify(origGeo)
+                                    + " origOpacity=" + origOpacity)
+                                editPopup.close()
+                                editWindow.openFor(win, origGeo, origOpacity)
+                                console.log("[EDIT] after transfer: editWindow.visible=" + editWindow.visible
+                                    + " editWindowContent.targetWindow=" + (editWindowContent.targetWindow ? editWindowContent.targetWindow.caption : "null"))
+                            } else {
+                                console.log("[EDIT] no popup targetWindow, skipping Popup→Window transfer")
+                            }
                         }
                     }
                 }
@@ -874,7 +927,6 @@ KWin.TabBoxSwitcher {
 
                                             // Status buttons
                                             Flow {
-                                                Layout.alignment: Qt.AlignVTop
                                                 Layout.fillHeight: true
                                                 Layout.fillWidth: true
                                                 Layout.preferredWidth: parent.centerButtons ? 0 : 1
@@ -1270,7 +1322,7 @@ KWin.TabBoxSwitcher {
                                                         PlasmaComponents3.Button {
                                                             icon.name: "view-tasks-all-symbolic"
                                                             onClicked: window.skipTaskbar = !window.skipTaskbar
-                                                            background.opacity: settings.buttonOpacity
+                                                            background.opacity: settings.opacityWindowButton
                                                             implicitWidth: buttonSize
                                                             implicitHeight: buttonSize
                                                             ToolTip.text: buttonSkipTaskbar._tooltip_text
@@ -1309,7 +1361,7 @@ KWin.TabBoxSwitcher {
                                                         PlasmaComponents3.Button {
                                                             icon.name: "window-list"
                                                             onClicked: window.skipSwitcher = !window.skipSwitcher
-                                                            background.opacity: settings.buttonOpacity
+                                                            background.opacity: settings.opacityWindowButton
                                                             implicitWidth: buttonSize
                                                             implicitHeight: buttonSize
                                                             ToolTip.text: buttonSkipSwitcher._tooltip_text
@@ -1348,7 +1400,7 @@ KWin.TabBoxSwitcher {
                                                         PlasmaComponents3.Button {
                                                             icon.name: "window-duplicate-symbolic"
                                                             onClicked: window.skipPager = !window.skipPager
-                                                            background.opacity: settings.buttonOpacity
+                                                            background.opacity: settings.opacityWindowButton
                                                             implicitWidth: buttonSize
                                                             implicitHeight: buttonSize
                                                             ToolTip.text: buttonSkipPager._tooltip_text
@@ -2225,6 +2277,36 @@ KWin.TabBoxSwitcher {
             var text = dumpProperties(window)
             var cmd = "echo '" + text.replace(/'/g, "'\\''") + "' > /tmp/kwin_debug_window.txt && kdialog --textbox /tmp/kwin_debug_window.txt --title 'KWin: " + caption + "' --geometry 480x600"
             executableSource.connectSource(cmd)
+        }
+    }
+
+    Window {
+        id: editWindow
+        visible: false
+        flags: Qt.Window | Qt.WindowStaysOnTopHint
+        color: Kirigami.Theme.backgroundColor
+        width: Kirigami.Units.gridUnit * 32
+        height: Kirigami.Units.gridUnit * 18
+
+        function openFor(win, origGeo, origOpacity) {
+            editWindowContent.targetWindow = null
+            editWindowContent.openFor(win, null, origGeo, origOpacity)
+            editWindow.show()
+        }
+
+        title: editWindowContent.targetWindow ? ("Edit: " + editWindowContent.targetWindow.caption) : "Edit Window Geometry"
+
+        EditPopup {
+            id: editWindowContent
+            closePolicy: Popup.NoAutoClose
+            x: 0
+            y: 0
+            width: parent.width
+            height: parent.height
+            screenW: tabBox.screenGeometry.width
+            screenH: tabBox.screenGeometry.height
+            onClosed: editWindow.close()
+            background: null
         }
     }
 }

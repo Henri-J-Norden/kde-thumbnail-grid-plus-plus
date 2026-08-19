@@ -816,11 +816,6 @@ KWin.TabBoxSwitcher {
                     function onVisibleChanged() {
                         copyMenu.dismiss()
                         tabBox.animationFinished = false
-                        console.log("[EDIT] tabBox.onVisibleChanged visible=" + tabBox.visible
-                            + " editWindow.visible=" + editWindow.visible
-                            + " editWindowContent.targetWindow=" + (editWindowContent.targetWindow ? editWindowContent.targetWindow.caption : "null")
-                            + " editPopup.visible=" + editPopup.visible
-                            + " editPopup.targetWindow=" + (editPopup.targetWindow ? editPopup.targetWindow.caption : "null"))
                         if (tabBox.visible) {
                             armTimer.start()
                             if (editWindow.visible && editWindowContent.targetWindow) {
@@ -828,7 +823,6 @@ KWin.TabBoxSwitcher {
                                 const origGeo = editWindowContent.originalGeometry
                                 const origOpacity = editWindowContent.originalOpacity
                                 editWindow.close()
-                                console.log("[EDIT] transferring Window→Popup for " + win.caption)
                                 editPopup.openFor(win, dialogMainItem.delegatePositionForWindow(win), origGeo, origOpacity)
                             }
                         } else {
@@ -836,15 +830,8 @@ KWin.TabBoxSwitcher {
                                 const win = editPopup.targetWindow
                                 const origGeo = editPopup.originalGeometry
                                 const origOpacity = editPopup.originalOpacity
-                                console.log("[EDIT] transferring Popup→Window for " + win.caption
-                                    + " origGeo=" + JSON.stringify(origGeo)
-                                    + " origOpacity=" + origOpacity)
                                 editPopup.close()
                                 editWindow.openFor(win, origGeo, origOpacity)
-                                console.log("[EDIT] after transfer: editWindow.visible=" + editWindow.visible
-                                    + " editWindowContent.targetWindow=" + (editWindowContent.targetWindow ? editWindowContent.targetWindow.caption : "null"))
-                            } else {
-                                console.log("[EDIT] no popup targetWindow, skipping Popup→Window transfer")
                             }
                         }
                     }

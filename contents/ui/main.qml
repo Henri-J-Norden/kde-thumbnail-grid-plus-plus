@@ -89,6 +89,7 @@ KWin.TabBoxSwitcher {
         property int minimizedIcon: 0
         property real opacityWindowButton: 0.75
         property bool showSettingsButton: true
+        property bool lockGridWidth: true
         property int buttonMaximize: 2
         property int buttonFullscreen: 1
         property int buttonNoBorder: 1
@@ -140,6 +141,13 @@ KWin.TabBoxSwitcher {
         id: wrapper
         visible: tabBox.visible
         flags: Qt.BypassWindowManagerHint | Qt.FramelessWindowHint
+
+        onVisibleChanged: {
+            dialogMainItem.lockedColumns = 0
+            // Latch after the model has populated for this invocation.
+            if (visible && settings.lockGridWidth)
+                Qt.callLater(() => dialogMainItem.lockedColumns = dialogMainItem.columns)
+        }
         color: "transparent"
         width: tabBox.screenGeometry.width
         height: tabBox.screenGeometry.height
@@ -564,7 +572,24 @@ KWin.TabBoxSwitcher {
                 property int maxGridColumnsByWidth: Math.floor(maxW / cellWidth)
                 property int itemCount: repeater.total_count
 
+                // Latched on open so the grid doesn't reflow horizontally when
+                // windows are closed mid-session. 0 = not latched yet.
+                property int lockedColumns: 0
+
+                // Fewest columns that keep itemCount rows within maxH.
+                readonly property int minColumnsByHeight: {
+                    const rowsThatFit = Math.floor(maxH / cellHeight);
+                    if (itemCount === 0 || rowsThatFit < 1) return 1;
+                    return Math.ceil(itemCount / rowsThatFit);
+                }
+
                 property int columns: {
+                    if (settings.lockGridWidth && lockedColumns > 0) {
+                        // Relax the lock, upward only, if the grid would overflow
+                        // vertically (e.g. windows opened while the switcher is up).
+                        return Math.min(Math.max(lockedColumns, minColumnsByHeight),
+                                        Math.max(1, maxGridColumnsByWidth));
+                    }
                     if (itemCount === 0) return 1;
                     const c = Math.min(itemCount, maxGridColumnsByWidth);
                     if (c <= 1) return 1;
@@ -1779,6 +1804,19 @@ KWin.TabBoxSwitcher {
                             ToolTip.visible: ma5.containsMouse
                             MouseArea { id: ma5; anchors.fill: parent; hoverEnabled: true; onClicked: cbButtonSettings.toggle() }
                         }
+                        Item { Layout.fillWidth: true }
+                        PlasmaComponents3.CheckBox {
+                            id: cbLockGridWidth
+                            checked: settings.lockGridWidth
+                            onCheckedChanged: settings.lockGridWidth = checked
+                        }
+                        PlasmaComponents3.Label {
+                            textFormat: Text.RichText
+                            text: "Lock grid width<sup>?</sup>"
+                            ToolTip.text: "Keep the number of columns fixed while the task switcher is open, so the grid doesn't reflow horizontally when windows are opened or closed. Still widens if the grid would otherwise overflow the screen vertically."
+                            ToolTip.visible: ma6.containsMouse
+                            MouseArea { id: ma6; anchors.fill: parent; hoverEnabled: true; onClicked: cbLockGridWidth.toggle() }
+                        }
                     }
 
                     RowLayout {
@@ -2239,7 +2277,7 @@ KWin.TabBoxSwitcher {
                         visible: settings.buttonTransparency != 0
                         PlasmaComponents3.Label { text: "Window transparency button opacity:" }
                         PlasmaComponents3.Slider {
-                            from: 0.01
+                            from: 0
                             to: 0.99
                             value: settings.opacityWindow
                             stepSize: 0.01

@@ -91,6 +91,8 @@ KWin.TabBoxSwitcher {
         property bool showSettingsButton: true
         property bool lockGridWidth: true
         property int buttonMaximize: 2
+        property int buttonMaximizeHorizontal: 0
+        property int buttonMaximizeVertical: 0
         property int buttonFullscreen: 1
         property int buttonNoBorder: 1
         property int buttonMinimize: 2
@@ -711,6 +713,10 @@ KWin.TabBoxSwitcher {
                         if (window) { const isMax = window.frameGeometry.width >= tabBox.screenGeometry.width - 1; window.setMaximize(!isMax, !isMax) }
                     } else if (key === Qt.Key_PageDown) {
                         if (window) window.minimized = !window.minimized;
+                    } else if (key === Qt.Key_Home) {
+                        if (window) { const area = KWin.Workspace?.clientArea(KWin.Workspace.MaximizeArea, window); const isV = window.frameGeometry.height >= area?.height - 1; window.setMaximize(false, !isV) }
+                    } else if (key === Qt.Key_End) {
+                        if (window) { const area = KWin.Workspace?.clientArea(KWin.Workspace.MaximizeArea, window); const isH = window.frameGeometry.width >= area?.width - 1; window.setMaximize(!isH, false) }
                     } else if (key === Qt.Key_F) {
                         if (window) window.fullScreen = !window.fullScreen
                     } else if (key === Qt.Key_T) {
@@ -877,8 +883,13 @@ KWin.TabBoxSwitcher {
                                 readonly property var maximizeArea: window ?
                                     KWin.Workspace?.clientArea(KWin.Workspace.MaximizeArea, window) : null
 
-                                readonly property bool isMaximized: window ?
-                                    (window.frameGeometry.width >= maximizeArea?.width - 1 && window.frameGeometry.height >= maximizeArea?.height - 1 && !window.fullScreen) : false
+                                readonly property bool isMaximizedHorizontal: window ?
+                                    (window.frameGeometry.width >= maximizeArea?.width - 1 && !window.fullScreen) : false
+
+                                readonly property bool isMaximizedVertical: window ?
+                                    (window.frameGeometry.height >= maximizeArea?.height - 1 && !window.fullScreen) : false
+
+                                readonly property bool isMaximized: isMaximizedHorizontal && isMaximizedVertical
 
                                 readonly property bool isX11: tabBox.isX11Window(window)
 
@@ -1504,6 +1515,92 @@ KWin.TabBoxSwitcher {
                                                     }
                                                 }
 
+                                                // Maximize Horizontal Button
+                                                Loader {
+                                                    id: buttonMaximizeHorizontal
+                                                    visible: (window?.maximizable || false) && buttonVisible(settings.buttonMaximizeHorizontal, isMaximizedHorizontal)
+                                                    sourceComponent: buttonHighlight(settings.buttonMaximizeHorizontal, isMaximizedHorizontal) ? buttonMaximizeHorizontalTrue : buttonMaximizeHorizontalFalse
+                                                    readonly property string _tooltip_text: isMaximizedHorizontal ? "Unmaximize horizontally [End]" : "Maximize horizontally [End]"
+
+                                                    Component {
+                                                        id: buttonMaximizeHorizontalTrue
+                                                        PlasmaComponents3.RoundButton {
+                                                            icon.name: "window-maximize-symbolic"
+                                                            onClicked: if (window) {
+                                                                window.setMaximize(false, !isMaximizedHorizontal)
+                                                            }
+                                                            implicitWidth: buttonSize
+                                                            implicitHeight: buttonSize
+                                                            ToolTip.text: buttonMaximizeHorizontal._tooltip_text
+                                                            ToolTip.visible: hovered
+                                                            layer.enabled: true
+                                                            layer.effect: MultiEffect {
+                                                                shadowEnabled: true
+                                                                shadowColor: Kirigami.Theme.neutralTextColor
+                                                                shadowBlur: 0.5
+                                                            }
+                                                        }
+                                                    }
+
+                                                    Component {
+                                                        id: buttonMaximizeHorizontalFalse
+                                                        PlasmaComponents3.Button {
+                                                            icon.name: "window-maximize-symbolic"
+                                                            onClicked: if (window) {
+                                                                window.setMaximize(false, !isMaximizedHorizontal)
+                                                            }
+                                                            background.opacity: settings.opacityWindowButton
+                                                            implicitWidth: buttonSize
+                                                            implicitHeight: buttonSize
+                                                            ToolTip.text: buttonMaximizeHorizontal._tooltip_text
+                                                            ToolTip.visible: hovered
+                                                        }
+                                                    }
+                                                }
+
+                                                // Maximize Vertical Button
+                                                Loader {
+                                                    id: buttonMaximizeVertical
+                                                    visible: (window?.maximizable || false) && buttonVisible(settings.buttonMaximizeVertical, isMaximizedVertical)
+                                                    sourceComponent: buttonHighlight(settings.buttonMaximizeVertical, isMaximizedVertical) ? buttonMaximizeVerticalTrue : buttonMaximizeVerticalFalse
+                                                    readonly property string _tooltip_text: isMaximizedVertical ? "Unmaximize vertically [Home]" : "Maximize vertically [Home]"
+
+                                                    Component {
+                                                        id: buttonMaximizeVerticalTrue
+                                                        PlasmaComponents3.RoundButton {
+                                                            icon.name: "window-maximize-symbolic"
+                                                            onClicked: if (window) {
+                                                                window.setMaximize(!isMaximizedVertical, false)
+                                                            }
+                                                            implicitWidth: buttonSize
+                                                            implicitHeight: buttonSize
+                                                            ToolTip.text: buttonMaximizeVertical._tooltip_text
+                                                            ToolTip.visible: hovered
+                                                            layer.enabled: true
+                                                            layer.effect: MultiEffect {
+                                                                shadowEnabled: true
+                                                                shadowColor: Kirigami.Theme.neutralTextColor
+                                                                shadowBlur: 0.5
+                                                            }
+                                                        }
+                                                    }
+
+                                                    Component {
+                                                        id: buttonMaximizeVerticalFalse
+                                                        PlasmaComponents3.Button {
+                                                            icon.name: "window-maximize-symbolic"
+                                                            onClicked: if (window) {
+                                                                window.setMaximize(!isMaximizedVertical, false)
+                                                            }
+                                                            background.opacity: settings.opacityWindowButton
+                                                            implicitWidth: buttonSize
+                                                            implicitHeight: buttonSize
+                                                            ToolTip.text: buttonMaximizeVertical._tooltip_text
+                                                            ToolTip.visible: hovered
+                                                        }
+                                                    }
+                                                }
+
                                                 // Minimize/Restore Button
                                                 Loader {
                                                     id: minRestoreButton
@@ -1681,7 +1778,7 @@ KWin.TabBoxSwitcher {
 
             Item {
                 id: settingsItem
-                implicitWidth: Kirigami.Units.gridUnit * 40
+                implicitWidth: Kirigami.Units.gridUnit * 60
                 implicitHeight: settingsContent.implicitHeight + Kirigami.Units.largeSpacing * 2
 
                 Rectangle {
@@ -2256,6 +2353,22 @@ KWin.TabBoxSwitcher {
                                     model: dialogMainItem.buttonModeModel
                                     currentIndex: settings.buttonMaximize
                                     onActivated: settings.buttonMaximize = currentIndex
+                                }
+                            }
+                            RowLayout {
+                                PlasmaComponents3.Label { text: "Maximize horizontally" }
+                                PlasmaComponents3.ComboBox {
+                                    model: dialogMainItem.buttonModeModel
+                                    currentIndex: settings.buttonMaximizeHorizontal
+                                    onActivated: settings.buttonMaximizeHorizontal = currentIndex
+                                }
+                            }   
+                            RowLayout {
+                                PlasmaComponents3.Label { text: "Maximize vertically" }
+                                PlasmaComponents3.ComboBox {
+                                    model: dialogMainItem.buttonModeModel
+                                    currentIndex: settings.buttonMaximizeVertical
+                                    onActivated: settings.buttonMaximizeVertical = currentIndex
                                 }
                             }
                             RowLayout {

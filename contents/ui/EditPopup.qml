@@ -1,3 +1,8 @@
+/*
+ SPDX-FileCopyrightText: 2026 Henri J. Norden <55378880+Henri-J-Norden@users.noreply.github.com>
+ SPDX-License-Identifier: GPL-2.0-or-later
+ */
+
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Window

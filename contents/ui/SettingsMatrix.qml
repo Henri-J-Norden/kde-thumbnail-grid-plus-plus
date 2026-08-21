@@ -1,8 +1,5 @@
 /*
- KWin - the KDE window manager
- This file is part of the KDE project.
-
- SPDX-FileCopyrightText: 2024 Antigravity <antigravity@google.com>
+ SPDX-FileCopyrightText: 2026 Henri J. Norden <55378880+Henri-J-Norden@users.noreply.github.com>
  SPDX-License-Identifier: GPL-2.0-or-later
  */
 
@@ -39,14 +36,29 @@ ColumnLayout {
 
     spacing: 0
 
-    // Rows surviving `filter`. Group headings are dropped while filtering:
-    // the remaining rows no longer form contiguous groups.
+    // Rows surviving `filter`. Group headings are kept above their matching
+    // rows so context is preserved while filtering.
     readonly property var shownRows: {
         const f = root.filter.trim().toLowerCase()
         if (f.length === 0)
             return root.rows
-        return root.rows.filter(r => r.group === undefined
-                                     && r.label.toLowerCase().indexOf(f) >= 0)
+        const out = []
+        let pendingGroup = null
+        for (let i = 0; i < root.rows.length; ++i) {
+            const r = root.rows[i]
+            if (r.group !== undefined) {
+                pendingGroup = r
+                continue
+            }
+            if (r.label.toLowerCase().indexOf(f) >= 0) {
+                if (pendingGroup) {
+                    out.push(pendingGroup)
+                    pendingGroup = null
+                }
+                out.push(r)
+            }
+        }
+        return out
     }
 
     RowLayout {

@@ -1,8 +1,5 @@
 /*
- KWin - the KDE window manager
- This file is part of the KDE project.
-
- SPDX-FileCopyrightText: 2024 Antigravity <antigravity@google.com>
+ SPDX-FileCopyrightText: 2026 Henri J. Norden <55378880+Henri-J-Norden@users.noreply.github.com>
  SPDX-License-Identifier: GPL-2.0-or-later
  */
 
@@ -11,6 +8,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.plasma.components 3.0 as PlasmaComponents3
 import org.kde.kirigami as Kirigami
+import org.kde.kquickcontrolsaddons
 
 // The live settings editor. Like EditPopup, this is a Popup so it can be hosted
 // two ways: over the switcher while alt-tab is up (where a real window would sit
@@ -55,6 +53,8 @@ Popup {
     focus: true
     width: Kirigami.Units.gridUnit * 46
     height: Kirigami.Units.gridUnit * 40
+
+    Clipboard { id: clipboard }
 
     readonly property real minimumPanelWidth: Kirigami.Units.gridUnit * 34
     readonly property real minimumPanelHeight: Kirigami.Units.gridUnit * 20
@@ -121,13 +121,12 @@ Popup {
     }
 
     readonly property var categories: [
-        { id: "grid",       name: "Grid & layout",      glyph: "▦", count: 3 },
-        { id: "thumbnails", name: "Thumbnails",         glyph: "▭", count: 3 },
-        { id: "icons",      name: "Icons & labels",     glyph: "◉", count: 2 },
-        { id: "minimized",  name: "Minimized windows",  glyph: "▁", count: 10 },
-        { id: "buttons",    name: "Window buttons",     glyph: "◧", count: 22 },
-        { id: "behaviour",  name: "Behaviour",          glyph: "↹", count: 2 },
-        { id: "advanced",   name: "Advanced",           glyph: "⚙", count: 2 }
+        { id: "grid",       name: "Grid & layout",      glyph: "▦" },
+        { id: "thumbnails", name: "Thumbnails",         glyph: "▭" },
+        { id: "icons",      name: "Icons & labels",     glyph: "◉" },
+        { id: "minimized",  name: "Minimized windows",  glyph: "▁" },
+        { id: "buttons",    name: "Window buttons",     glyph: "◧" },
+        { id: "advanced",   name: "Meta & preview",     glyph: "⚙" }
     ]
 
     // "0 Off", "1 On (always)", ... -> { num: "0", label: "Off" }.
@@ -152,6 +151,14 @@ Popup {
     function restoreDefaults() {
         for (const key in root.defaults)
             root.cfg[key] = root.defaults[key]
+    }
+
+    // Human-readable rendering of a default value for tooltips.
+    function formatDefault(key) {
+        const v = root.defaults[key]
+        if (v === undefined) return ""
+        if (typeof v === "boolean") return v ? "on" : "off"
+        return String(v)
     }
 
     // A titled block of settings belonging to one category. Rows added by the
@@ -179,8 +186,30 @@ Popup {
                 if (child.searchKey !== undefined
                         && child.searchKey.toLowerCase().indexOf(needle) >= 0)
                     return true
+                // SettingsMatrix:
+                if (child.shownRows !== undefined && child.shownRows.length > 0)
+                    return true
             }
             return false
+        }
+
+        readonly property int visibleCount: {
+            let n = 0
+            const needle = root.searchText.toLowerCase()
+            for (let i = 0; i < section.children.length; ++i) {
+                const child = section.children[i]
+                if (child.searchKey !== undefined) {
+                    if (root.searchText.length === 0 || section.titleMatch
+                            || child.searchKey.toLowerCase().indexOf(needle) >= 0)
+                        n++
+                } else if (child.shownRows !== undefined) {
+                    for (let j = 0; j < child.shownRows.length; ++j) {
+                        if (child.shownRows[j].group === undefined)
+                            n++
+                    }
+                }
+            }
+            return n
         }
 
         visible: root.searchText.length === 0 || anyMatch
@@ -224,13 +253,27 @@ Popup {
         id: helpLabel
         property string help: ""
         property string plain: ""
+        property string cfgKey: ""
+        property string defaultDisplay: ""
+        readonly property bool isChanged: cfgKey !== ""
+            && root.defaults[cfgKey] !== undefined
+            && root.cfg[cfgKey] !== root.defaults[cfgKey]
+        readonly property string defaultText: defaultDisplay !== ""
+            ? defaultDisplay : root.formatDefault(cfgKey)
         // Emitted when the label itself is clicked, so a label can toggle the
         // check box it belongs to.
         signal labelClicked()
         textFormat: Text.RichText
         text: plain + (help !== "" ? "<sup>?</sup>" : "")
-        ToolTip.text: help
-        ToolTip.visible: help !== "" && maHelp.containsMouse
+        font.bold: isChanged
+        color: isChanged ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
+        ToolTip.text: {
+            let t = help
+            if (isChanged)
+                t += (t !== "" ? "\n\n" : "") + "Default: " + defaultText
+            return t
+        }
+        ToolTip.visible: (help !== "" || isChanged) && maHelp.containsMouse
         ToolTip.delay: 0
         MouseArea {
             id: maHelp
@@ -261,6 +304,10 @@ Popup {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
+            // Sit inside the background's border rather than painting over it.
+            anchors.leftMargin: root.showChrome ? 1 : 0
+            anchors.rightMargin: root.showChrome ? 1 : 0
+            anchors.topMargin: root.showChrome ? 1 : 0
             color: Kirigami.Theme.alternateBackgroundColor
 
             readonly property real implicitTitleHeight: titleLabel.implicitHeight + Kirigami.Units.largeSpacing
@@ -305,7 +352,7 @@ Popup {
                     anchors.margins: Kirigami.Units.smallSpacing
                     spacing: Kirigami.Units.smallSpacing
 
-                    PlasmaComponents3.TextField {
+                    KwinTextField {
                         id: searchField
                         placeholderText: "Search settings"
                         text: root.searchText
@@ -320,7 +367,17 @@ Popup {
                             id: catDelegate
                             required property var modelData
 
+                            readonly property var section: {
+                                for (let i = 0; i < settingsColumn.children.length; ++i) {
+                                    const child = settingsColumn.children[i]
+                                    if (child.cat === catDelegate.modelData.id)
+                                        return child
+                                }
+                                return null
+                            }
+
                             enabled: root.searchText.length === 0
+                                     || (section && section.visibleCount > 0)
                             opacity: enabled ? 1 : 0.5
                             highlighted: root.activeCategory === catDelegate.modelData.id
                             onClicked: root.scrollToCategory(catDelegate.modelData.id)
@@ -340,7 +397,7 @@ Popup {
                                     Layout.fillWidth: true
                                 }
                                 PlasmaComponents3.Label {
-                                    text: catDelegate.modelData.count
+                                    text: catDelegate.section ? catDelegate.section.visibleCount : 0
                                     font.family: "monospace"
                                     font.pointSize: Kirigami.Theme.smallFont.pointSize
                                     color: Kirigami.Theme.disabledTextColor
@@ -356,7 +413,7 @@ Popup {
                     PlasmaComponents3.Label {
                         text: root.isPreview
                               ? "Changes apply to the preview live. Restart KWin (log out and back in) to apply them to the real task switcher."
-                              : "Changes apply live. Restart KWin to apply them to a fresh session."
+                              : "Changes apply live."
                         font.pointSize: Kirigami.Theme.smallFont.pointSize
                         color: Kirigami.Theme.disabledTextColor
                         wrapMode: Text.Wrap
@@ -372,6 +429,12 @@ Popup {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.margins: Kirigami.Units.largeSpacing
+                // The scroll area runs to the panel edge so its scrollbar sits
+                // flush; the footer row re-adds the margin for itself.
+                Layout.rightMargin: 0
+                // Never let the settings content force the pane wider than the
+                // panel; the Flickable clips whatever does not fit.
+                Layout.minimumWidth: 0
                 spacing: Kirigami.Units.smallSpacing
 
                 Flickable {
@@ -383,7 +446,7 @@ Popup {
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
 
-                    ScrollBar.vertical: ScrollBar { active: true }
+                    ScrollBar.vertical: PlasmaComponents3.ScrollBar { active: true }
 
                     ColumnLayout {
                         id: settingsColumn
@@ -401,6 +464,7 @@ Popup {
                                 searchKey: "max grid aspect ratio ultrawide"
                                 HelpLabel {
                                     plain: "Max grid aspect ratio"
+                                    cfgKey: "maxGridAspectRatioInput"
                                     help: "Limits how wide the grid of windows can be relative to its height. \n" +
                                           "Useful for ultrawide displays, to prevent the task switcher from becoming too wide. \n\n" +
                                           "E.g. 21:9 means that: \n" +
@@ -418,10 +482,17 @@ Popup {
                                     onMoved: root.cfg.maxGridAspectRatioInput = root.toFractionString(value)
                                     Layout.fillWidth: true
                                 }
-                                PlasmaComponents3.TextField {
+                                KwinTextField {
                                     text: root.cfg.maxGridAspectRatioInput
                                     onTextEdited: root.cfg.maxGridAspectRatioInput = text
                                     Layout.preferredWidth: Kirigami.Units.gridUnit * 5
+                                }
+                                PlasmaComponents3.Label {
+                                    text: root.maxGridAspectRatio > 0
+                                          ? "= " + root.maxGridAspectRatio.toFixed(2)
+                                          : "no limit"
+                                    color: Kirigami.Theme.disabledTextColor
+                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 4
                                 }
                             }
 
@@ -434,6 +505,7 @@ Popup {
                                 }
                                 HelpLabel {
                                     plain: "Lock grid width"
+                                    cfgKey: "lockGridWidth"
                                     help: "Keep the number of columns fixed while the task switcher is open, so the grid doesn't reflow horizontally when windows are opened or closed. Still widens if the grid would otherwise overflow the screen vertically."
                                     onLabelClicked: cbLockGridWidth.toggle()
                                 }
@@ -441,8 +513,9 @@ Popup {
 
                             SettingRow {
                                 searchKey: "background opacity dim"
-                                PlasmaComponents3.Label {
-                                    text: "Background opacity"
+                                HelpLabel {
+                                    plain: "Background opacity"
+                                    cfgKey: "opacityBackground"
                                     Layout.preferredWidth: Kirigami.Units.gridUnit * 11
                                 }
                                 PlasmaComponents3.Slider {
@@ -459,6 +532,53 @@ Popup {
                                     Layout.preferredWidth: Kirigami.Units.gridUnit * 3
                                 }
                             }
+
+                            SettingRow {
+                                searchKey: "select with mouse hover selection"
+                                PlasmaComponents3.CheckBox {
+                                    id: cbHoverSelection
+                                    checked: root.cfg.hoverSelection
+                                    onCheckedChanged: root.cfg.hoverSelection = checked
+                                }
+                                HelpLabel {
+                                    plain: "Select with mouse hover"
+                                    cfgKey: "hoverSelection"
+                                    help: "Useful when \"Show selected windows\" (in Task Switcher - System Setting) is enabled, " +
+                                          "to preview a window by just hovering on it in the grid (with the mouse cursor). \n\n" +
+                                          "Note: regardless of this setting, you can always: \n" +
+                                          "- Click on a window to switch to it. \n" +
+                                          "- Cancel task switching by clicking outside the grid or by pressing [Esc] on the keyboard."
+                                    onLabelClicked: cbHoverSelection.toggle()
+                                }
+                            }
+
+                            SettingRow {
+                                searchKey: "hover selection minimum delta dead zone jitter"
+                                HelpLabel {
+                                    plain: "Hover dead zone"
+                                    cfgKey: "hoverSelectionMinDeltaGU"
+                                    help: "Minimum distance the mouse must travel (after the switcher animation finishes) " +
+                                          "before hover selection activates. Prevents accidental selection from small " +
+                                          "mouse jitter when the cursor is already resting on a thumbnail.\n\n" +
+                                          "0 disables this (any movement selects immediately).\n\n" +
+                                          "Value is in grid units, which scale with your display's DPI setting."
+                                    Layout.minimumWidth: Kirigami.Units.gridUnit * 8
+                                }
+                                PlasmaComponents3.Slider {
+                                    from: 0.0
+                                    to: 5.0
+                                    stepSize: 0.05
+                                    value: root.cfg.hoverSelectionMinDeltaGU
+                                    onMoved: root.cfg.hoverSelectionMinDeltaGU = value
+                                    Layout.fillWidth: true
+                                }
+                                PlasmaComponents3.Label {
+                                    text: root.cfg.hoverSelectionMinDeltaGU.toFixed(2) + " GU (" +
+                                          Math.round(root.cfg.hoverSelectionMinDeltaGU * Kirigami.Units.gridUnit) + " px)"
+                                    horizontalAlignment: Text.AlignRight
+                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 7
+                                }
+                            }
                         }
 
                         // ---- Thumbnails ----------------------------------
@@ -470,8 +590,10 @@ Popup {
 
                             SettingRow {
                                 searchKey: "thumbnail width grid units size"
-                                PlasmaComponents3.Label {
-                                    text: "Thumbnail width"
+                                HelpLabel {
+                                    plain: "Thumbnail width"
+                                    cfgKey: "thumbnailWidthGridUnits"
+                                    defaultDisplay: "16 grid units"
                                     Layout.preferredWidth: Kirigami.Units.gridUnit * 11
                                 }
                                 PlasmaComponents3.SpinBox {
@@ -486,11 +608,12 @@ Popup {
 
                             SettingRow {
                                 searchKey: "thumbnail height aspect ratio"
-                                PlasmaComponents3.Label {
-                                    text: "Thumbnail height"
+                                HelpLabel {
+                                    plain: "Thumbnail height"
+                                    cfgKey: "thumbnailHeightInput"
                                     Layout.preferredWidth: Kirigami.Units.gridUnit * 11
                                 }
-                                PlasmaComponents3.TextField {
+                                KwinTextField {
                                     text: root.cfg.thumbnailHeightInput
                                     onTextEdited: root.cfg.thumbnailHeightInput = text
                                     Layout.preferredWidth: Kirigami.Units.gridUnit * 6
@@ -505,8 +628,9 @@ Popup {
 
                             SettingRow {
                                 searchKey: "thumbnail opacity"
-                                PlasmaComponents3.Label {
-                                    text: "Thumbnail opacity"
+                                HelpLabel {
+                                    plain: "Thumbnail opacity"
+                                    cfgKey: "opacityThumbnail"
                                     Layout.preferredWidth: Kirigami.Units.gridUnit * 11
                                 }
                                 PlasmaComponents3.Slider {
@@ -534,8 +658,10 @@ Popup {
 
                             SettingRow {
                                 searchKey: "icon size"
-                                PlasmaComponents3.Label {
-                                    text: "Icon size"
+                                HelpLabel {
+                                    plain: "Icon size"
+                                    cfgKey: "iconSizeIndex"
+                                    defaultDisplay: "Large"
                                     Layout.preferredWidth: Kirigami.Units.gridUnit * 11
                                 }
                                 PlasmaComponents3.ComboBox {
@@ -555,6 +681,7 @@ Popup {
                                 }
                                 HelpLabel {
                                     plain: "Show windowing protocol"
+                                    cfgKey: "showProtocol"
                                     help: "Display the windowing protocol (Wayland or X11) next to each window's icon."
                                     onLabelClicked: cbShowProtocol.toggle()
                                 }
@@ -622,6 +749,7 @@ Popup {
                                 }
                                 HelpLabel {
                                     plain: "Move buttons toward the centre when not hovered"
+                                    cfgKey: "centerHighlightButtons"
                                     help: "When not hovered/selected, move status buttons (normally on the left) and action buttons (normally on the right) towards the center of the thumbnail."
                                     onLabelClicked: cbInvertButtons.toggle()
                                 }
@@ -629,8 +757,9 @@ Popup {
 
                             SettingRow {
                                 searchKey: "window button size"
-                                PlasmaComponents3.Label {
-                                    text: "Button size"
+                                HelpLabel {
+                                    plain: "Button size"
+                                    cfgKey: "buttonSize"
                                     Layout.preferredWidth: Kirigami.Units.gridUnit * 11
                                 }
                                 PlasmaComponents3.Slider {
@@ -642,7 +771,7 @@ Popup {
                                     Layout.fillWidth: true
                                 }
                                 PlasmaComponents3.Label {
-                                    text: root.cfg.buttonSize.toFixed(1) + "×"
+                                    text: root.cfg.buttonSize.toFixed(1) + " GU"
                                     horizontalAlignment: Text.AlignRight
                                     Layout.preferredWidth: Kirigami.Units.gridUnit * 3
                                 }
@@ -650,8 +779,9 @@ Popup {
 
                             SettingRow {
                                 searchKey: "window button opacity"
-                                PlasmaComponents3.Label {
-                                    text: "Button opacity"
+                                HelpLabel {
+                                    plain: "Button opacity"
+                                    cfgKey: "opacityWindowButton"
                                     Layout.preferredWidth: Kirigami.Units.gridUnit * 11
                                 }
                                 PlasmaComponents3.Slider {
@@ -726,8 +856,9 @@ Popup {
                                          && (root.searchText.length === 0
                                              || buttonsSection.titleMatch
                                              || searchKey.toLowerCase().indexOf(root.searchText.toLowerCase()) >= 0)
-                                PlasmaComponents3.Label {
-                                    text: "Transparency button opacity"
+                                HelpLabel {
+                                    plain: "Transparency button opacity"
+                                    cfgKey: "opacityWindow"
                                     Layout.preferredWidth: Kirigami.Units.gridUnit * 11
                                 }
                                 PlasmaComponents3.Slider {
@@ -746,56 +877,18 @@ Popup {
                             }
                         }
 
-                        // ---- Behaviour -----------------------------------
-                        Section {
-                            id: behaviourSection
-                            cat: "behaviour"
-                            title: "Behaviour"
-                            description: "How the switcher responds to the mouse."
-
-                            SettingRow {
-                                searchKey: "select with mouse hover selection"
-                                PlasmaComponents3.CheckBox {
-                                    id: cbHoverSelection
-                                    checked: root.cfg.hoverSelection
-                                    onCheckedChanged: root.cfg.hoverSelection = checked
-                                }
-                                HelpLabel {
-                                    plain: "Select with mouse hover"
-                                    help: "Useful when \"Show selected windows\" (in Task Switcher - System Setting) is enabled, " +
-                                          "to preview a window by just hovering on it in the grid (with the mouse cursor). \n\n" +
-                                          "Note: regardless of this setting, you can always: \n" +
-                                          "- Click on a window to switch to it. \n" +
-                                          "- Cancel task switching by clicking outside the grid or by pressing [Esc] on the keyboard."
-                                    onLabelClicked: cbHoverSelection.toggle()
-                                }
-                            }
-
-                            SettingRow {
-                                searchKey: "settings button configure"
-                                PlasmaComponents3.CheckBox {
-                                    id: cbButtonSettings
-                                    checked: root.cfg.showSettingsButton
-                                    onCheckedChanged: root.cfg.showSettingsButton = checked
-                                }
-                                HelpLabel {
-                                    plain: "Show settings button"
-                                    help: "Show a settings button (at the bottom left of the screen), when the task switcher is opened."
-                                    onLabelClicked: cbButtonSettings.toggle()
-                                }
-                            }
-                        }
-
-                        // ---- Advanced ------------------------------------
+                        // ---- Meta & preview ------------------------------------
                         Section {
                             id: advancedSection
                             cat: "advanced"
-                            title: "Advanced"
+                            title: "Meta & preview"
+                            description: "Settings metadata and options for previewing setting changes."
 
                             SettingRow {
                                 searchKey: "preview repeat count test"
                                 HelpLabel {
                                     plain: "Preview repeat count"
+                                    cfgKey: "previewRepeatCount"
                                     help: "Duplicate each window this many times in the preview, to test how the grid behaves with many windows."
                                     Layout.preferredWidth: Kirigami.Units.gridUnit * 11
                                 }
@@ -815,23 +908,95 @@ Popup {
                             }
 
                             SettingRow {
-                                searchKey: "config file location ini profile"
+                                searchKey: "config file location ini"
                                 PlasmaComponents3.Label {
                                     text: "Config file"
                                     Layout.preferredWidth: Kirigami.Units.gridUnit * 11
                                 }
-                                PlasmaComponents3.TextField {
+                                PlasmaComponents3.Label {
                                     text: root.cfg.location
                                     font.family: "monospace"
+                                    font.italic: true
                                     font.pointSize: Kirigami.Theme.smallFont.pointSize
-                                    readOnly: true
+                                    color: Kirigami.Theme.disabledTextColor
+                                    elide: Text.ElideMiddle
                                     Layout.fillWidth: true
                                 }
-                                PlasmaComponents3.TextField {
+                                PlasmaComponents3.Button {
+                                    icon.name: "edit-copy"
+                                    implicitWidth: implicitHeight
+                                    ToolTip.text: "Copy file path"
+                                    ToolTip.visible: hovered
+                                    ToolTip.delay: 0
+                                    onClicked: {
+                                        clipboard.content = root.cfg.location
+                                        copiedTimer.restart()
+                                    }
+                                    PlasmaComponents3.Label {
+                                        text: "Copied!"
+                                        visible: copiedTimer.running
+                                        color: Kirigami.Theme.highlightColor
+                                        font.pointSize: Kirigami.Theme.smallFont.pointSize
+                                        anchors.centerIn: parent
+                                        padding: Kirigami.Units.smallSpacing
+                                        background: Rectangle {
+                                            color: Kirigami.Theme.backgroundColor
+                                            border.color: Kirigami.Theme.highlightColor
+                                            border.width: 1
+                                            radius: 3
+                                        }
+                                    }
+                                    Timer {
+                                        id: copiedTimer
+                                        interval: 1500
+                                        repeat: false
+                                    }
+                                }
+                            }
+
+                            SettingRow {
+                                searchKey: "profile category name"
+                                PlasmaComponents3.Label {
+                                    text: "Profile"
+                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 11
+                                }
+                                PlasmaComponents3.Label {
                                     text: root.cfg.category
                                     font.family: "monospace"
+                                    font.italic: true
                                     font.pointSize: Kirigami.Theme.smallFont.pointSize
-                                    readOnly: true
+                                    color: Kirigami.Theme.disabledTextColor
+                                    Layout.fillWidth: true
+                                }
+                            }
+
+                            SettingRow {
+                                searchKey: "settings button configure"
+                                PlasmaComponents3.CheckBox {
+                                    id: cbButtonSettings
+                                    checked: root.cfg.showSettingsButton
+                                    onCheckedChanged: root.cfg.showSettingsButton = checked
+                                }
+                                HelpLabel {
+                                    plain: "Show settings button"
+                                    cfgKey: "showSettingsButton"
+                                    help: "Show a settings button (at the bottom left of the screen), when the task switcher is opened."
+                                    onLabelClicked: cbButtonSettings.toggle()
+                                }
+                            }
+
+                            SettingRow {
+                                searchKey: "show settings window after closing preview"
+                                PlasmaComponents3.CheckBox {
+                                    id: cbShowSettingsAfterPreview
+                                    checked: root.cfg.showSettingsAfterPreview
+                                    onCheckedChanged: root.cfg.showSettingsAfterPreview = checked
+                                }
+                                HelpLabel {
+                                    plain: "Show settings after closing preview"
+                                    cfgKey: "showSettingsAfterPreview"
+                                    help: "Keep the settings panel open in a standalone window after the preview is closed (e.g. by clicking the background or pressing Esc)."
+                                    onLabelClicked: cbShowSettingsAfterPreview.toggle()
                                 }
                             }
                         }
@@ -853,10 +1018,14 @@ Popup {
                     }
                 }
 
-                Kirigami.Separator { Layout.fillWidth: true }
+                Kirigami.Separator {
+                    Layout.fillWidth: true
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
+                }
 
                 RowLayout {
                     Layout.fillWidth: true
+                    Layout.rightMargin: Kirigami.Units.largeSpacing * 2
                     spacing: Kirigami.Units.smallSpacing
 
                     PlasmaComponents3.Label {
@@ -864,8 +1033,12 @@ Popup {
                               ? "All settings are at their defaults"
                               : root.changedCount + (root.changedCount === 1 ? " setting differs" : " settings differ") + " from defaults"
                         color: Kirigami.Theme.disabledTextColor
+                        // Takes the slack and gives it up again: at the panel's
+                        // minimum width the buttons must still fit.
+                        elide: Text.ElideRight
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
                     }
-                    Item { Layout.fillWidth: true }
                     PlasmaComponents3.Button {
                         text: "Reset position"
                         onClicked: root.resetPosition()

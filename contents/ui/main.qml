@@ -2,6 +2,7 @@
  KWin - the KDE window manager
  This file is part of the KDE project.
 
+ SPDX-FileCopyrightText: 2026 Henri J. Norden <55378880+Henri-J-Norden@users.noreply.github.com>
  SPDX-FileCopyrightText: 2024 Antigravity <antigravity@google.com>
  SPDX-License-Identifier: GPL-2.0-or-later
  */
@@ -30,19 +31,29 @@ KWin.TabBoxSwitcher {
         return win ? /X11Window/.test(String(win)) : false
     }
 
+    // Splits "16:9" into [16, 9], or null if it is not a pair of positive numbers.
+    function splitRatio(input) {
+        const parts = (input || "").trim().split(":")
+        if (parts.length !== 2) return null
+        const x = parseFloat(parts[0])
+        const y = parseFloat(parts[1])
+        if (isNaN(x) || isNaN(y) || x <= 0 || y <= 0) return null
+        return [x, y]
+    }
+
+    // True for input that is meant as a ratio but is not a usable one, so
+    // callers can reject it instead of falling through to parseFloat() - which
+    // would read "16:9" as plain 16.
+    function looksLikeRatio(input) {
+        return (input || "").includes(":")
+    }
+
     function parseAspectRatio(input) {
         const s = (input || "").trim()
         if (!s) return 0
-        if (s.includes(":")) {
-            const parts = s.split(":")
-            if (parts.length === 2) {
-                const x = parseFloat(parts[0])
-                const y = parseFloat(parts[1])
-                if (!isNaN(x) && !isNaN(y) && x > 0 && y > 0)
-                    return x / y
-            }
-            return 0
-        }
+        const ratio = splitRatio(s)
+        if (ratio) return ratio[0] / ratio[1]
+        if (looksLikeRatio(s)) return 0
         const v = parseFloat(s)
         return (!isNaN(v) && v > 0) ? v : 0
     }
@@ -70,7 +81,9 @@ KWin.TabBoxSwitcher {
         category: tabBox.isAlternative ? "Alt" : "Main"
         location: StandardPaths.writableLocation(StandardPaths.GenericConfigLocation) + "/kwin_thumbnail_grid_plus.ini"
         property bool hoverSelection: true
+        property real hoverSelectionMinDeltaGU: 1.0
         property bool showSettingsButton: true
+        property bool showSettingsAfterPreview: true
         property bool showProtocol: true
         property bool lockGridWidth: true
         property bool centerHighlightButtons: true
@@ -129,7 +142,9 @@ KWin.TabBoxSwitcher {
     // above by hand; keep the two in sync when adding a setting.
     readonly property var settingsDefaults: ({
         hoverSelection: true,
+        hoverSelectionMinDeltaGU: 1.0,
         showSettingsButton: true,
+        showSettingsAfterPreview: false,
         showProtocol: true,
         lockGridWidth: true,
         centerHighlightButtons: true,
@@ -177,7 +192,7 @@ KWin.TabBoxSwitcher {
         buttonSkipSwitcher: 5,
 
         buttonClose: true,
-        buttonDebug: false
+        buttonDebug: false,
     })
 
     // Labels for the mode settings above. Deliberately not declared inside Settings:
@@ -219,6 +234,7 @@ KWin.TabBoxSwitcher {
     function updateSettingsHost() {
         const wantPopup = showPreview && wrapper.visible
         const wantWindow = showPreview && !wrapper.visible
+            && (!isPreview || settings.showSettingsAfterPreview)
 
         movingSettings = true
         if (!wantPopup && settingsPopup.opened) {
@@ -308,6 +324,10 @@ KWin.TabBoxSwitcher {
                 focus: true
                 anchors.fill: parent
 
+                property point hoverArmPosition: Qt.point(0, 0)
+                property bool hoverArmPositionSet: false
+                property bool hoverThresholdMet: false
+
                 Clipboard { id: clipboard }
 
                 CopyMenu {
@@ -348,21 +368,16 @@ KWin.TabBoxSwitcher {
                 readonly property int thumbnailHeight: {
                     const input = (settings.thumbnailHeightInput || "").trim();
 
-                    // Try aspect ratio "X:Y"
-                    if (input.includes(":")) {
-                        const parts = input.split(":");
-                        if (parts.length === 2) {
-                            const x = parseFloat(parts[0]);
-                            const y = parseFloat(parts[1]);
-                            if (!isNaN(x) && !isNaN(y) && x > 0) {
-                                return Math.round(thumbnailWidth * (y / x));
-                            }
-                        }
+                    // Try aspect ratio "X:Y" (or "XxY")
+                    const ratio = tabBox.splitRatio(input);
+                    if (ratio) {
+                        return Math.round(thumbnailWidth * (ratio[1] / ratio[0]));
                     }
 
-                    // Try plain positive number (gridUnits)
+                    // Try plain positive number (gridUnits), but never read a
+                    // malformed ratio as just its first number.
                     const num = parseFloat(input);
-                    if (!isNaN(num) && num > 0) {
+                    if (!tabBox.looksLikeRatio(input) && !isNaN(num) && num > 0) {
                         return Math.round(Kirigami.Units.gridUnit * num);
                     }
 
@@ -628,7 +643,11 @@ KWin.TabBoxSwitcher {
                 Timer {
                     id: armTimer
                     interval: Kirigami.Units.veryLongDuration
-                    onTriggered: tabBox.animationFinished = true
+                    onTriggered: {
+                        tabBox.animationFinished = true
+                        dialogMainItem.hoverArmPositionSet = false
+                        dialogMainItem.hoverThresholdMet = false
+                    }
                 }
 
                 Connections {
@@ -649,7 +668,7 @@ KWin.TabBoxSwitcher {
                                 editPopup.openFor(win, dialogMainItem.delegatePositionForWindow(win), origGeo, origOpacity)
                             }
                         } else {
-                            if (editPopup.targetWindow) {
+                            if (editPopup.opened && editPopup.targetWindow) {
                                 const win = editPopup.targetWindow
                                 const origGeo = editPopup.originalGeometry
                                 const origOpacity = editPopup.originalOpacity
@@ -690,6 +709,9 @@ KWin.TabBoxSwitcher {
 
                                 // Context consumed by the WindowButton instances below.
                                 readonly property bool hovered: hoverHandler.hovered
+                                    && (settings.hoverSelectionMinDeltaGU <= 0
+                                        || dialogMainItem.hoverThresholdMet
+                                        || !tabBox.animationFinished)
                                 readonly property real buttonSize: tabBox.buttonSize
                                 readonly property real buttonBackgroundOpacity: settings.opacityWindowButton
 
@@ -698,8 +720,8 @@ KWin.TabBoxSwitcher {
                                     switch (mode) {
                                         case 0: return false;
                                         case 1: return true;
-                                        case 2: return !hoverHandler.hovered && !isCurrent;
-                                        case 3: return !hoverHandler.hovered;
+                                        case 2: return !hovered && !isCurrent;
+                                        case 3: return !hovered;
                                         case 4: return !isCurrent;
                                         default: return false;
                                     }
@@ -708,6 +730,19 @@ KWin.TabBoxSwitcher {
                                 readonly property var window: {
                                     const windows = KWin.Workspace?.stackingOrder || [];
                                     return windows.find(w => w.internalId === windowId) || null;
+                                }
+
+                                property bool maximizable: window?.maximizable ?? false
+                                property bool minimizable: window?.minimizable ?? false
+
+                                Connections {
+                                    target: window
+                                    function onMaximizeableChanged() { maximizable = window.maximizable }
+                                    function onMinimizeableChanged() { minimizable = window.minimizable }
+                                    function onFullScreenChanged() {
+                                        maximizable = window.maximizable
+                                        minimizable = window.minimizable
+                                    }
                                 }
 
                                 readonly property var maximizeArea: window ?
@@ -733,14 +768,31 @@ KWin.TabBoxSwitcher {
                                     visible: isCurrent
                                 }
 
+                                HoverHandler {
+                                    id: selectionHoverHandler
+                                    enabled: settings.hoverSelection && tabBox.animationFinished
+                                    onPointChanged: {
+                                        const minDelta = settings.hoverSelectionMinDeltaGU * Kirigami.Units.gridUnit
+                                        if (minDelta > 0 && !dialogMainItem.hoverThresholdMet) {
+                                            const pos = mapToItem(dialogMainItem, point.position.x, point.position.y)
+                                            if (!dialogMainItem.hoverArmPositionSet) {
+                                                dialogMainItem.hoverArmPosition = pos
+                                                dialogMainItem.hoverArmPositionSet = true
+                                                return
+                                            }
+                                            const dx = pos.x - dialogMainItem.hoverArmPosition.x
+                                            const dy = pos.y - dialogMainItem.hoverArmPosition.y
+                                            if (Math.sqrt(dx * dx + dy * dy) < minDelta)
+                                                return
+                                            dialogMainItem.hoverThresholdMet = true
+                                        }
+                                        tabBox.currentIndex = index
+                                    }
+                                }
+
                                 MouseArea {
                                     anchors.fill: parent
                                     onClicked: tabBox.model.activate(index)
-                                    hoverEnabled: settings.hoverSelection
-                                    onPositionChanged: {
-                                        if (tabBox.animationFinished)
-                                            tabBox.currentIndex = index
-                                    }
                                     
                                     Accessible.name: model.caption
                                     Accessible.role: Accessible.ListItem
@@ -785,7 +837,7 @@ KWin.TabBoxSwitcher {
                                             }
                                             spacing: Kirigami.Units.smallSpacing
 
-                                            readonly property bool centerButtons: settings.centerHighlightButtons && !isCurrent && !hoverHandler.hovered
+                                            readonly property bool centerButtons: settings.centerHighlightButtons && !isCurrent && !hovered
 
                                             Item {
                                                 visible: parent.centerButtons
@@ -965,7 +1017,7 @@ KWin.TabBoxSwitcher {
                                                     cell: cell
                                                     mode: settings.buttonMaximize
                                                     checked: isMaximized
-                                                    supported: window?.maximizable ?? false
+                                                    supported: maximizable
                                                     iconName: "window-maximize-symbolic"
                                                     iconNameChecked: "window-restore-symbolic"
                                                     tooltipChecked: "Unmaximize [PgUp]"
@@ -978,7 +1030,7 @@ KWin.TabBoxSwitcher {
                                                     cell: cell
                                                     mode: settings.buttonMaximizeHorizontal
                                                     checked: isMaximizedHorizontal
-                                                    supported: window?.maximizable ?? false
+                                                    supported: maximizable
                                                     iconName: "transform-move-horizontal-symbolic"
                                                     tooltipChecked: "Unmaximize horizontally [End]"
                                                     tooltipUnchecked: "Maximize horizontally [End]"
@@ -991,7 +1043,7 @@ KWin.TabBoxSwitcher {
                                                     cell: cell
                                                     mode: settings.buttonMaximizeVertical
                                                     checked: isMaximizedVertical
-                                                    supported: window?.maximizable ?? false
+                                                    supported: maximizable
                                                     iconName: "transform-move-vertical-symbolic"
                                                     tooltipChecked: "Unmaximize vertically [Home]"
                                                     tooltipUnchecked: "Maximize vertically [Home]"
@@ -1004,7 +1056,7 @@ KWin.TabBoxSwitcher {
                                                     cell: cell
                                                     mode: settings.buttonMinimize
                                                     checked: window?.minimized ?? false
-                                                    supported: window?.minimizable ?? false
+                                                    supported: minimizable
                                                     iconName: "window-minimize-symbolic"
                                                     iconNameChecked: "window-restore-symbolic"
                                                     tooltipChecked: "Unminimize [PgDn]"
@@ -1149,15 +1201,16 @@ KWin.TabBoxSwitcher {
 
             x: 0
             y: 0
-            // Initial size only; the resize grip takes over from here.
+            // Reset size each time the popup opens so it matches the current
+            // screen resolution (the resize grip takes over from here).
             // End above the settings button so it stays clickable.
-            Component.onCompleted: height = wrapper.height
-                                   - settingsButton.height
-                                   - Kirigami.Units.largeSpacing * 2
+            onVisibleChanged: if (visible)
+                height = wrapper.height - settingsButton.height - Kirigami.Units.largeSpacing * 2
 
             onResetPosition: {
                 settingsPopup.x = 0
                 settingsPopup.y = 0
+                settingsPopup.width = Kirigami.Units.gridUnit * 46
                 settingsPopup.height = wrapper.height
                                        - settingsButton.height
                                        - Kirigami.Units.largeSpacing * 2
@@ -1198,6 +1251,7 @@ KWin.TabBoxSwitcher {
             onResetPosition: {
                 settingsWindow.x = tabBox.screenGeometry.x
                 settingsWindow.y = tabBox.screenGeometry.y
+                settingsWindow.width = Kirigami.Units.gridUnit * 46
             }
             onClosed: settingsWindow.close()
         }

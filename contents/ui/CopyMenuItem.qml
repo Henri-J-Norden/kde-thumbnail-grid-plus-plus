@@ -1,8 +1,5 @@
 /*
- KWin - the KDE window manager
- This file is part of the KDE project.
-
- SPDX-FileCopyrightText: 2024 Antigravity <antigravity@google.com>
+ SPDX-FileCopyrightText: 2026 Henri J. Norden <55378880+Henri-J-Norden@users.noreply.github.com>
  SPDX-License-Identifier: GPL-2.0-or-later
  */
 

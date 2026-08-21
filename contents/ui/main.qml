@@ -137,6 +137,9 @@ KWin.TabBoxSwitcher {
         property int killGraceSeconds: 3
 
         property bool buttonClose: true
+        // Milliseconds the Close button (or Delete) must be held to kill the
+        // window's process instead of closing it; 0 disables hold-to-kill.
+        property int closeHoldMs: 2000
         property bool buttonDebug: false
     }
 
@@ -199,6 +202,7 @@ KWin.TabBoxSwitcher {
         killGraceSeconds: 3,
 
         buttonClose: true,
+        closeHoldMs: 2000,
         buttonDebug: false,
     })
 
@@ -223,6 +227,26 @@ KWin.TabBoxSwitcher {
     // setting; these map it onto buttonModeModel.
     readonly property int buttonModeOff: 0
     readonly property int buttonModeOnHover: 4
+
+    // Keyboard auto-repeat timing, as configured by the user in System Settings
+    // -> Keyboard -> Key repeat (KWin applies these to the Wayland seat's
+    // repeat_info; on X11 they are the XKB repeat delay/rate). Hold-to-kill has
+    // to infer "still held" from auto-repeat presses, so it needs the real
+    // values rather than a guessed constant. These are the Plasma defaults,
+    // used until the read below comes back, and if the keys are unset.
+    property int keyRepeatDelay: 600   // ms before repeating starts
+    property int keyRepeatRate: 25     // repeats per second thereafter
+    readonly property string keyRepeatCommand:
+        "kreadconfig6 --file kcminputrc --group Keyboard --key RepeatDelay --default 600;"
+        + " kreadconfig6 --file kcminputrc --group Keyboard --key RepeatRate --default 25"
+
+    function applyKeyRepeat(stdout) {
+        const lines = String(stdout).trim().split("\n")
+        const delay = parseFloat(lines[0])
+        const rate = parseFloat(lines[1])
+        if (delay > 0) keyRepeatDelay = Math.round(delay)
+        if (rate > 0) keyRepeatRate = Math.round(rate)
+    }
 
     readonly property real buttonSize: Kirigami.Units.gridUnit * settings.buttonSize
     readonly property bool isAlternative: false  // tabBox.mode is undefined
@@ -571,16 +595,143 @@ KWin.TabBoxSwitcher {
                     onTriggered: dialogMainItem.reopenCopyMenu()
                 }
 
+                // Hold-to-kill for the Delete key.
+                //
+                // KWin's tab box grabs the keyboard and only forwards key
+                // *presses* to the QML view — releases are consumed for its own
+                // modifier handling — so "still held" can only be inferred from
+                // auto-repeat presses arriving, and "released" from them
+                // stopping. Delete therefore keeps closing on the press, and
+                // holding it escalates to a kill once closeHoldMs has passed;
+                // on a window that closed normally the escalation never gets
+                // there, and on a wedged one the close was ignored anyway.
+                property bool closeHoldArmed: false
+                // A hold is only *known* to be a hold once auto-repeat confirms
+                // the key is still down, one repeat delay after the press. The
+                // progress indicator waits for that rather than flashing red on
+                // every Delete tap, and picks up at the elapsed time below.
+                property bool closeHoldConfirmed: false
+                property int closeHoldConfirmedMs: 0
+                property double closeHoldConfirmedAt: 0
+                property bool closeHoldFired: false
+                property double closeHoldStart: 0
+                property int closeHoldPid: 0
+                // internalId of the window the hold began on, so a hold can
+                // never escalate onto whatever got selected after it closed.
+                property var closeHoldWindow: null
+
+                // Whether the window the hold began on is still around. Asking
+                // that of the workspace rather than of the selection keeps the
+                // hold alive across model changes: a window opening or closing
+                // elsewhere shifts what currentIndex points at, which is not
+                // the hold's target changing.
+                function closeHoldTargetAlive() {
+                    if (closeHoldWindow === null) return false
+                    const windows = KWin.Workspace?.stackingOrder || []
+                    return windows.some(w => w.internalId === closeHoldWindow)
+                }
+
+                function closeWindowAt(index) {
+                    if (index < 0 || tabBox.pendingIndex >= 0) return
+                    tabBox.pendingIndex = tabBox.currentIndex
+                    tabBox.model.close(index)
+                }
+
+                function cancelCloseHold() {
+                    closeRepeatTimer.stop()
+                    closeHoldArmed = false
+                    closeHoldConfirmed = false
+                    closeHoldConfirmedMs = 0
+                    closeHoldConfirmedAt = 0
+                    closeHoldFired = false
+                    closeHoldWindow = null
+                }
+
+                // A repeat that doesn't arrive means the key is no longer down.
+                // The first one has to wait out the user's repeat delay; once
+                // repeats are flowing they come every 1000/rate ms.
+                Timer {
+                    id: closeRepeatTimer
+                    interval: dialogMainItem.firstRepeatInterval
+                    onTriggered: dialogMainItem.cancelCloseHold()
+                }
+
+                // Both allow a wide margin: missing a repeat disarms a hold the
+                // user is still holding, and the kill never fires.
+                readonly property int firstRepeatInterval: tabBox.keyRepeatDelay + 250
+                readonly property int nextRepeatInterval:
+                    Math.max(150, Math.round(3000 / Math.max(1, tabBox.keyRepeatRate)))
+
+                // Whether KWin's tab box marks forwarded auto-repeats as such.
+                // It grabs the keyboard and re-sends key events itself, so the
+                // flag can arrive cleared; once one is seen it is trusted, and
+                // rapid Delete taps keep closing one window each.
+                property bool autoRepeatFlagged: false
+                property double closeHoldLast: 0
+
+                // A held Delete looks like a stream of presses. With no usable
+                // isAutoRepeat, fall back to their timing: anything arriving
+                // inside the window the watchdog is currently waiting on (the
+                // repeat delay before the first repeat, the repeat interval
+                // after) is part of the same hold rather than a new press.
+                function isCloseRepeat(event) {
+                    const now = Date.now()
+                    const sinceLast = now - closeHoldLast
+                    closeHoldLast = now
+                    if (autoRepeatFlagged) return event.isAutoRepeat
+                    // Once the hold's window is gone it closed as asked, so a
+                    // further press is a new one however fast it arrived.
+                    return closeHoldArmed && closeHoldTargetAlive()
+                        && sinceLast <= closeRepeatTimer.interval
+                }
+
+                function beginCloseHold() {
+                    const win = currentWindow()
+                    closeHoldPid = win?.pid ?? 0
+                    closeHoldWindow = win?.internalId ?? null
+                    closeHoldConfirmed = false
+                    closeHoldConfirmedMs = 0
+                    closeHoldConfirmedAt = 0
+                    closeHoldFired = false
+                    closeHoldStart = Date.now()
+                    closeWindowAt(tabBox.currentIndex)
+                    closeHoldArmed = settings.closeHoldMs > 0 && closeHoldPid > 0
+                    if (closeHoldArmed) {
+                        closeRepeatTimer.interval = firstRepeatInterval
+                        closeRepeatTimer.restart()
+                    }
+                }
+
+                // Called for each auto-repeat of a held Delete.
+                function continueCloseHold() {
+                    if (!closeHoldArmed) return
+                    // The window the hold began on is gone, so it closed like
+                    // it was asked to. There is nothing to escalate to, and its
+                    // pid may still own windows the user never asked to close.
+                    if (!closeHoldTargetAlive()) {
+                        cancelCloseHold()
+                        return
+                    }
+                    closeRepeatTimer.interval = nextRepeatInterval
+                    closeRepeatTimer.restart()
+                    if (!closeHoldConfirmed) {
+                        closeHoldConfirmedMs =
+                            Math.min(Date.now() - closeHoldStart, settings.closeHoldMs)
+                        closeHoldConfirmedAt = Date.now()
+                        closeHoldConfirmed = true
+                    }
+                    if (closeHoldFired) return
+                    if (Date.now() - closeHoldStart < settings.closeHoldMs) return
+                    closeHoldFired = true
+                    tabBox.pendingIndex = tabBox.currentIndex
+                    executableSource.killPid(closeHoldPid)
+                }
+
                 function handleSpecialKeys(key) {
                     const idx = tabBox.model.index(tabBox.currentIndex, 0)
                     const window = currentWindow()
 
-                    if (key === Qt.Key_Delete) {
-                        if (tabBox.pendingIndex < 0) {
-                            tabBox.pendingIndex = tabBox.currentIndex
-                            tabBox.model.close(tabBox.currentIndex)
-                        }
-                    } else if (key === Qt.Key_PageUp) {
+                    if (key === Qt.Key_PageUp) {
                         if (window) { const isMax = window.frameGeometry.width >= tabBox.screenGeometry.width - 1; window.setMaximize(!isMax, !isMax) }
                     } else if (key === Qt.Key_PageDown) {
                         if (window) window.minimized = !window.minimized;
@@ -642,6 +793,18 @@ KWin.TabBoxSwitcher {
                 }
 
                 Keys.onPressed: (event) => {
+                    if (event.isAutoRepeat) autoRepeatFlagged = true
+                    if (event.key === Qt.Key_Delete) {
+                        event.accepted = true
+                        if (isCloseRepeat(event)) {
+                            continueCloseHold()
+                        } else {
+                            beginCloseHold()
+                        }
+                        return
+                    }
+                    // Any other key means Delete is no longer what's held down.
+                    cancelCloseHold()
                     if (navigate(event.key)) { event.accepted = true; return; }
                     if (handleSpecialKeys(event.key)) { event.accepted = true; return; }
                 }
@@ -663,6 +826,7 @@ KWin.TabBoxSwitcher {
                         if (copyMenu.sticky) reopenCopyMenuTimer.restart()
                     }
                     function onVisibleChanged() {
+                        dialogMainItem.cancelCloseHold()
                         copyMenu.dismiss()
                         tabBox.animationFinished = false
                         if (tabBox.visible) {
@@ -1027,10 +1191,22 @@ KWin.TabBoxSwitcher {
                                                     mode: settings.buttonClose ? tabBox.buttonModeOnHover : 0
                                                     supported: model.closeable
                                                     iconName: "window-close-symbolic"
-                                                    tooltipUnchecked: "Close [Del]"
+                                                    tooltipUnchecked: holdEnabled ? "Close [Del]\nHold to kill" : "Close [Del]"
+                                                    holdMs: settings.closeHoldMs
+                                                    // Remote X11 clients report no usable PID; close only.
+                                                    holdSupported: (window?.pid ?? 0) > 0
+                                                    // Mirror a hold driven from the keyboard on the selected cell.
+                                                    holdExternal: cell.isCurrent && dialogMainItem.closeHoldConfirmed
+                                                    holdStartedMs: dialogMainItem.closeHoldConfirmedMs
+                                                    holdExternalStart: dialogMainItem.closeHoldConfirmedAt
+                                                    holdExternalFired: dialogMainItem.closeHoldFired
                                                     onToggled: {
                                                         tabBox.pendingIndex = tabBox.currentIndex
                                                         tabBox.model.close(index)
+                                                    }
+                                                    onHeld: {
+                                                        tabBox.pendingIndex = tabBox.currentIndex
+                                                        executableSource.killPid(window?.pid ?? 0)
                                                     }
                                                 }
 
@@ -1286,8 +1462,21 @@ KWin.TabBoxSwitcher {
         // Replies are routed by matching sourceName against each item's current
         // `command` binding, so there is no long-lived request map to mutate.
         onNewData: (sourceName, data) => {
+            if (sourceName === tabBox.keyRepeatCommand) {
+                tabBox.applyKeyRepeat(String(data.stdout))
+                executableSource.disconnectSource(sourceName)
+                return
+            }
             copyMenu.deliverResult(sourceName, String(data.stdout).trim())
             executableSource.disconnectSource(sourceName)
+        }
+
+        Component.onCompleted: executableSource.readKeyRepeat()
+
+        // Reads the user's keyboard auto-repeat timing, which hold-to-kill needs
+        // to tell a held Delete from a tapped one. See tabBox.keyRepeatDelay.
+        function readKeyRepeat() {
+            executableSource.connectSource(tabBox.keyRepeatCommand)
         }
 
         // Window.killWindow() is not exposed to QML

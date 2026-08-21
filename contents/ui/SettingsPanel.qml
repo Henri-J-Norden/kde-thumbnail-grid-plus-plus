@@ -833,7 +833,7 @@ Popup {
                                     { label: "Maximize horizontally", key: "buttonMaximizeHorizontal" },
                                     { label: "Maximize vertically", key: "buttonMaximizeVertical" },
                                     { label: "Kill (active = unresponsive)", key: "buttonKill" },
-                                    { label: "Close", key: "buttonClose", boolOnly: true },
+                                    { label: "Close (hold to kill)", key: "buttonClose", boolOnly: true },
                                     { label: "Debug", key: "buttonDebug", boolOnly: true }
                                 ]
                                 filter: parent.titleMatch ? "" : root.searchText
@@ -874,13 +874,34 @@ Popup {
                             }
 
                             SettingRow {
+                                searchKey: "close button hold to kill delete key duration press and hold"
+                                enabled: root.cfg.buttonClose
+                                HelpLabel {
+                                    plain: "Hold Close to kill"
+                                    cfgKey: "closeHoldMs"
+                                    defaultDisplay: "2000 ms"
+                                    help: "How long the Close button (or the Delete key) must be held down to kill the window's process instead of asking it to close. A short press still closes normally. Set to 0 to disable hold-to-kill. Windows with no usable process ID (remote X11 clients) always just close.\n\nThe Delete key always closes the moment it is pressed; holding it then escalates to a kill. The Close button closes on release instead, so holding it kills without ever asking the window to close."
+                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 11
+                                }
+                                PlasmaComponents3.SpinBox {
+                                    from: 0
+                                    to: 5000
+                                    stepSize: 100
+                                    value: root.cfg.closeHoldMs
+                                    onValueModified: root.cfg.closeHoldMs = value
+                                }
+                                PlasmaComponents3.Label { text: "ms" }
+                                Item { Layout.fillWidth: true }
+                            }
+
+                            SettingRow {
                                 searchKey: "kill button grace period sigterm sigkill force quit"
-                                enabled: root.cfg.buttonKill !== 0
+                                enabled: root.cfg.buttonKill !== 0 || root.cfg.closeHoldMs > 0
                                 HelpLabel {
                                     plain: "Kill grace period"
                                     cfgKey: "killGraceSeconds"
                                     defaultDisplay: "3 seconds"
-                                    help: "How long the Kill button waits after asking the window's process to quit (SIGTERM) before forcing it (SIGKILL). Longer gives apps like browsers and editors time to save their session; shorter makes an already-frozen window disappear sooner."
+                                    help: "How long a kill waits after asking the window's process to quit (SIGTERM) before forcing it (SIGKILL). Longer gives apps like browsers and editors time to save their session; shorter makes an already-frozen window disappear sooner."
                                     Layout.preferredWidth: Kirigami.Units.gridUnit * 11
                                 }
                                 PlasmaComponents3.SpinBox {

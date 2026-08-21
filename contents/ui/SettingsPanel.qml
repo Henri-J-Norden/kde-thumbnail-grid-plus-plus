@@ -832,6 +832,7 @@ Popup {
                                     { label: "Maximize", key: "buttonMaximize" },
                                     { label: "Maximize horizontally", key: "buttonMaximizeHorizontal" },
                                     { label: "Maximize vertically", key: "buttonMaximizeVertical" },
+                                    { label: "Kill (active = unresponsive)", key: "buttonKill" },
                                     { label: "Close", key: "buttonClose", boolOnly: true },
                                     { label: "Debug", key: "buttonDebug", boolOnly: true }
                                 ]
@@ -852,10 +853,6 @@ Popup {
 
                             SettingRow {
                                 searchKey: "window transparency button opacity"
-                                visible: root.cfg.buttonTransparency !== 0
-                                         && (root.searchText.length === 0
-                                             || buttonsSection.titleMatch
-                                             || searchKey.toLowerCase().indexOf(root.searchText.toLowerCase()) >= 0)
                                 HelpLabel {
                                     plain: "Transparency button opacity"
                                     cfgKey: "opacityWindow"
@@ -874,6 +871,26 @@ Popup {
                                     horizontalAlignment: Text.AlignRight
                                     Layout.preferredWidth: Kirigami.Units.gridUnit * 3
                                 }
+                            }
+
+                            SettingRow {
+                                searchKey: "kill button grace period sigterm sigkill force quit"
+                                enabled: root.cfg.buttonKill !== 0
+                                HelpLabel {
+                                    plain: "Kill grace period"
+                                    cfgKey: "killGraceSeconds"
+                                    defaultDisplay: "3 seconds"
+                                    help: "How long the Kill button waits after asking the window's process to quit (SIGTERM) before forcing it (SIGKILL). Longer gives apps like browsers and editors time to save their session; shorter makes an already-frozen window disappear sooner."
+                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 11
+                                }
+                                PlasmaComponents3.SpinBox {
+                                    from: 0
+                                    to: 60
+                                    value: root.cfg.killGraceSeconds
+                                    onValueModified: root.cfg.killGraceSeconds = value
+                                }
+                                PlasmaComponents3.Label { text: "seconds" }
+                                Item { Layout.fillWidth: true }
                             }
                         }
 

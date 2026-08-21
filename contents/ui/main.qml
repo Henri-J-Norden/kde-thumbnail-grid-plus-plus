@@ -132,6 +132,10 @@ KWin.TabBoxSwitcher {
         property int buttonSkipPager: 5
         property int buttonSkipSwitcher: 5
 
+        property int buttonKill: 5
+        // Seconds between SIGTERM and the SIGKILL follow-up.
+        property int killGraceSeconds: 3
+
         property bool buttonClose: true
         property bool buttonDebug: false
     }
@@ -190,6 +194,9 @@ KWin.TabBoxSwitcher {
         buttonSkipTaskbar: 5,
         buttonSkipPager: 5,
         buttonSkipSwitcher: 5,
+
+        buttonKill: 5,
+        killGraceSeconds: 3,
 
         buttonClose: true,
         buttonDebug: false,
@@ -999,6 +1006,21 @@ KWin.TabBoxSwitcher {
                                                 spacing: Kirigami.Units.smallSpacing
                                                 layoutDirection: Qt.RightToLeft
 
+                                                // Kill Button
+                                                WindowButton {
+                                                    cell: cell
+                                                    mode: settings.buttonKill
+                                                    checked: window?.unresponsive ?? false
+                                                    supported: (window?.pid ?? 0) > 0  // Remote X11 clients report no usable PID (not supported)
+                                                    iconName: "process-stop-symbolic"
+                                                    tooltipChecked: "Kill process\n(Window is unresponsive)"
+                                                    tooltipUnchecked: "Kill process"
+                                                    onToggled: {
+                                                        tabBox.pendingIndex = tabBox.currentIndex
+                                                        executableSource.killPid(window?.pid ?? 0)
+                                                    }
+                                                }
+
                                                 // Close Button
                                                 WindowButton {
                                                     cell: cell
@@ -1266,6 +1288,16 @@ KWin.TabBoxSwitcher {
         onNewData: (sourceName, data) => {
             copyMenu.deliverResult(sourceName, String(data.stdout).trim())
             executableSource.disconnectSource(sourceName)
+        }
+
+        // Window.killWindow() is not exposed to QML
+        function killPid(pid) {
+            if (!(pid > 0)) return
+            executableSource.connectSource(
+                "kill -TERM " + pid + " 2>/dev/null;"
+                + " setsid sh -c 'sleep " + settings.killGraceSeconds
+                + "; kill -0 " + pid + " 2>/dev/null"
+                + " && kill -KILL " + pid + "' </dev/null >/dev/null 2>&1 &")
         }
 
         function showDebugInfo(window, caption) {

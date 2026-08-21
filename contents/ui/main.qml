@@ -358,6 +358,23 @@ KWin.TabBoxSwitcher {
                 property point hoverArmPosition: Qt.point(0, 0)
                 property bool hoverArmPositionSet: false
                 property bool hoverThresholdMet: false
+                // Last pointer position in scene coordinates, used to tell real
+                // cursor movement apart from point updates caused by the grid
+                // relayouting under a stationary cursor.
+                property point hoverLastScenePosition: Qt.point(0, 0)
+                property bool hoverLastScenePositionSet: false
+                // Set while the hover handler itself is changing the selection, so
+                // that the resulting currentIndex change isn't mistaken for a
+                // keyboard selection and doesn't re-arm the dead zone.
+                property bool hoverSelecting: false
+
+                // Require the cursor to travel the dead zone again before hover
+                // selection may take over (e.g. after keyboard navigation).
+                function rearmHoverSelection() {
+                    hoverArmPosition = hoverLastScenePosition
+                    hoverArmPositionSet = hoverLastScenePositionSet
+                    hoverThresholdMet = false
+                }
 
                 Clipboard { id: clipboard }
 
@@ -817,12 +834,15 @@ KWin.TabBoxSwitcher {
                         tabBox.animationFinished = true
                         dialogMainItem.hoverArmPositionSet = false
                         dialogMainItem.hoverThresholdMet = false
+                        dialogMainItem.hoverLastScenePositionSet = false
                     }
                 }
 
                 Connections {
                     target: tabBox
                     function onCurrentIndexChanged() {
+                        if (!dialogMainItem.hoverSelecting)
+                            dialogMainItem.rearmHoverSelection()
                         if (copyMenu.sticky) reopenCopyMenuTimer.restart()
                     }
                     function onVisibleChanged() {
@@ -943,21 +963,35 @@ KWin.TabBoxSwitcher {
                                     id: selectionHoverHandler
                                     enabled: settings.hoverSelection && tabBox.animationFinished
                                     onPointChanged: {
+                                        // This also fires when the cell moves or resizes under a stationary
+                                        // cursor (e.g. the grid relayouting after a keyboard selection
+                                        // change). Scene coordinates are unaffected by that, so ignore any
+                                        // update that isn't real cursor movement -- otherwise hover would
+                                        // immediately undo arrow/tab navigation.
+                                        const scenePos = point.scenePosition
+                                        if (dialogMainItem.hoverLastScenePositionSet
+                                                && scenePos.x === dialogMainItem.hoverLastScenePosition.x
+                                                && scenePos.y === dialogMainItem.hoverLastScenePosition.y)
+                                            return
+                                        dialogMainItem.hoverLastScenePosition = scenePos
+                                        dialogMainItem.hoverLastScenePositionSet = true
+                                    
                                         const minDelta = settings.hoverSelectionMinDeltaGU * Kirigami.Units.gridUnit
                                         if (minDelta > 0 && !dialogMainItem.hoverThresholdMet) {
-                                            const pos = mapToItem(dialogMainItem, point.position.x, point.position.y)
                                             if (!dialogMainItem.hoverArmPositionSet) {
-                                                dialogMainItem.hoverArmPosition = pos
+                                                dialogMainItem.hoverArmPosition = scenePos
                                                 dialogMainItem.hoverArmPositionSet = true
                                                 return
                                             }
-                                            const dx = pos.x - dialogMainItem.hoverArmPosition.x
-                                            const dy = pos.y - dialogMainItem.hoverArmPosition.y
+                                            const dx = scenePos.x - dialogMainItem.hoverArmPosition.x
+                                            const dy = scenePos.y - dialogMainItem.hoverArmPosition.y
                                             if (Math.sqrt(dx * dx + dy * dy) < minDelta)
                                                 return
                                             dialogMainItem.hoverThresholdMet = true
                                         }
+                                        dialogMainItem.hoverSelecting = true
                                         tabBox.currentIndex = index
+                                        dialogMainItem.hoverSelecting = false
                                     }
                                 }
 

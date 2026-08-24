@@ -17,6 +17,7 @@ Popup {
     property real originalOpacity: 1.0
     property int screenW: 1920
     property int screenH: 1080
+    property bool showHeaderLabel: true
     modal: false
     closePolicy: Popup.CloseOnPressOutside
     padding: 0
@@ -106,9 +107,10 @@ Popup {
         spacing: Kirigami.Units.smallSpacing
 
         PlasmaComponents3.Label {
-            text: root.targetWindow ? ("Edit: " + root.targetWindow.caption) : "Edit Window Geometry"
+            text: root.targetWindow ? ("[TG++ Edit] " + root.targetWindow.caption) : "[TG++ Edit]"
             font.bold: true
             Layout.alignment: Qt.AlignHCenter
+            visible: root.showHeaderLabel
         }
 
         PlasmaComponents3.GroupBox {

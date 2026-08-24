@@ -141,6 +141,7 @@ KWin.TabBoxSwitcher {
         // window's process instead of closing it; 0 disables hold-to-kill.
         property int closeHoldMs: 2000
         property bool buttonDebug: false
+        property bool dumpSortKeys: false
     }
 
     // Defaults for SettingsPanel's "differs from defaults" count and its Restore
@@ -204,6 +205,7 @@ KWin.TabBoxSwitcher {
         buttonClose: true,
         closeHoldMs: 2000,
         buttonDebug: false,
+        dumpSortKeys: false,
     })
 
     // Labels for the mode settings above. Deliberately not declared inside Settings:
@@ -277,6 +279,7 @@ KWin.TabBoxSwitcher {
             if (wantPopup)
                 settingsPopup.adoptStateFrom(settingsWindowContent)
             settingsWindow.close()
+            settingsWindowContent.close()
         }
         // The panel sets `focus: true`, so opening hands it the keyboard.
         if (wantPopup && !settingsPopup.opened)
@@ -297,13 +300,31 @@ KWin.TabBoxSwitcher {
             dialogMainItem.forceActiveFocus()
     }
 
-    function dumpProperties(obj) {
+    function dumpProperties(obj, skipFunctions, indent) {
+        skipFunctions = skipFunctions || true
+        indent = indent || ""
+        const indentLevel = "    "
+        var keys = Object.keys(obj)
+        if (settings.dumpSortKeys)
+            keys.sort()
         var lines = []
-        for (var key in obj) {
+        for (var key of keys) {
             var v = obj[key]
-            if (typeof v === "function")  // skip methods and signals
+            if (skipFunctions && typeof v === "function") {
                 continue
-            lines.push(key + ": " + v)
+            }
+            let str = ""
+            if (v !== null && typeof v === "object") {
+                str = dumpProperties(v, skipFunctions, indent + indentLevel)
+            }
+            if (str) {
+                lines.push(indent + key + ":")
+                lines.push(indent + indentLevel + "# " + v)
+                lines.push(str)
+            } else {
+                str = JSON.stringify(v)
+                lines.push(indent + key + ": " + str + (str === "{}" ? "  # " + v : ""))
+            }
         }
         return lines.join("\n")
     }
@@ -1458,7 +1479,7 @@ KWin.TabBoxSwitcher {
         visible: false
         flags: Qt.Window | Qt.WindowStaysOnTopHint
         color: Kirigami.Theme.backgroundColor
-        title: "Thumbnail Grid ++ — " + settings.category + " profile"
+        title: "TG++ Settings - " + settings.category
         width: Kirigami.Units.gridUnit * 46
         height: tabBox.screenGeometry.height
 
@@ -1525,7 +1546,7 @@ KWin.TabBoxSwitcher {
 
         function showDebugInfo(window, caption) {
             var text = dumpProperties(window)
-            var cmd = "echo '" + text.replace(/'/g, "'\\''") + "' > /tmp/kwin_debug_window.txt && kdialog --textbox /tmp/kwin_debug_window.txt --title 'KWin: " + caption + "' --geometry 480x600"
+            var cmd = "echo '" + text.replace(/'/g, "'\\''") + "' > /tmp/kwin_debug_window.txt && kdialog --textbox /tmp/kwin_debug_window.txt --title '[TG++ Debug] " + caption + "' --geometry 480x600"
             executableSource.connectSource(cmd)
         }
     }
@@ -1544,11 +1565,12 @@ KWin.TabBoxSwitcher {
             editWindow.show()
         }
 
-        title: editWindowContent.targetWindow ? ("Edit: " + editWindowContent.targetWindow.caption) : "Edit Window Geometry"
+        title: editWindowContent.targetWindow ? ("[TG++ Edit] " + editWindowContent.targetWindow.caption) : "[TG++ Edit]"
 
         EditPopup {
             id: editWindowContent
             closePolicy: Popup.NoAutoClose
+            showHeaderLabel: false
             x: 0
             y: 0
             width: parent.width

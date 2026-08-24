@@ -80,13 +80,15 @@ Popup {
     property bool _adoptingState: false
 
     onOpened: {
-        if (_adoptingState)
+        if (_adoptingState) {
             Qt.callLater(() => {
                 settingsScroll.contentY = _pendingScrollY
                 _adoptingState = false
             })
-        else
-            Qt.callLater(() => root.scrollToCategory("buttons"))
+        } else {
+            // Uncomment to always reset scroll position when settings are re-opened?
+            //Qt.callLater(() => settingsScroll.contentY = 0)
+        }
     }
 
     property string searchText: ""
@@ -315,7 +317,7 @@ Popup {
             PlasmaComponents3.Label {
                 id: titleLabel
                 anchors.centerIn: parent
-                text: "Thumbnail Grid ++ — " + root.cfg.category + " profile"
+                text: "TG++ Settings - " + root.cfg.category
                 font.bold: true
             }
 
@@ -912,6 +914,21 @@ Popup {
                                 }
                                 PlasmaComponents3.Label { text: "seconds" }
                                 Item { Layout.fillWidth: true }
+                            }
+
+                            SettingRow {
+                                searchKey: "dump properties sort keys debug"
+                                PlasmaComponents3.CheckBox {
+                                    id: cbDumpSortKeys
+                                    checked: root.cfg.dumpSortKeys
+                                    onCheckedChanged: root.cfg.dumpSortKeys = checked
+                                }
+                                HelpLabel {
+                                    plain: "Sort keys in debug dump output"
+                                    cfgKey: "dumpSortKeys"
+                                    help: "Sort property keys alphabetically in the output of dumpProperties (Debug button). When off, keys appear in their natural enumeration order."
+                                    onLabelClicked: cbDumpSortKeys.toggle()
+                                }
                             }
                         }
 

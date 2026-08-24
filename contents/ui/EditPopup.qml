@@ -18,11 +18,13 @@ Popup {
     property int screenW: 1920
     property int screenH: 1080
     property bool showHeaderLabel: true
-    // The shared RepaintTrick from main.qml; moving a window needs a
-    // full-screen repaint or it leaves stale frames behind.
+    // The shared RepaintTrick from main.qml; moving anything from inside KWin
+    // needs a full-screen repaint or it leaves stale frames behind.
     property var repaintTrick: null
     modal: false
-    closePolicy: Popup.CloseOnPressOutside
+    // Matches SettingsPanel: a click on the switcher behind should not throw
+    // away an edit in progress. Escape, [E] and Cancel still dismiss it.
+    closePolicy: Popup.NoAutoClose
     padding: 0
     width: Kirigami.Units.gridUnit * 32
     height: Kirigami.Units.gridUnit * 18
@@ -33,20 +35,13 @@ Popup {
         radius: 6
         opacity: 0.95
 
-        DragHandler {
-            id: dragger
+        // Drag anywhere on the background, for the popup host. In the window
+        // host PopupWindowLoader's title bar does this instead - and there the
+        // background is not used at all.
+        PopupWindowDragArea {
+            anchors.fill: parent
             enabled: parent.visible
-            target: null
-            property real startX: 0
-            property real startY: 0
-            onActiveChanged: if (active) {
-                dragger.startX = root.x
-                dragger.startY = root.y
-            }
-            onActiveTranslationChanged: if (active) {
-                root.x = dragger.startX + activeTranslation.x
-                root.y = dragger.startY + activeTranslation.y
-            }
+            target: root
         }
     }
 
@@ -69,6 +64,37 @@ Popup {
         geoHSpin.value = g.height
         opacitySpin.value = Math.round((win.opacity ?? 1.0) * 100)
         root.open()
+    }
+
+    // Carries the whole editing session across a host change or a window
+    // rebuild: the window being edited, the values to restore on cancel, and
+    // whatever is currently typed into the fields but not yet applied.
+    function stateForTransfer() {
+        const g = root.originalGeometry
+        return {
+            targetWindow: root.targetWindow,
+            // Flattened to numbers: a rect read off a property is a
+            // reference into that object, and goes stale when the object it
+            // came from is destroyed.
+            originalX: g.x, originalY: g.y,
+            originalWidth: g.width, originalHeight: g.height,
+            originalOpacity: root.originalOpacity,
+            x: geoXSpin.value, y: geoYSpin.value,
+            width: geoWSpin.value, height: geoHSpin.value,
+            opacity: opacitySpin.value
+        }
+    }
+
+    function adoptState(state) {
+        root.targetWindow = state.targetWindow
+        root.originalGeometry = Qt.rect(state.originalX, state.originalY,
+                                        state.originalWidth, state.originalHeight)
+        root.originalOpacity = state.originalOpacity
+        geoXSpin.value = state.x
+        geoYSpin.value = state.y
+        geoWSpin.value = state.width
+        geoHSpin.value = state.height
+        opacitySpin.value = state.opacity
     }
 
     function applyGeometry() {

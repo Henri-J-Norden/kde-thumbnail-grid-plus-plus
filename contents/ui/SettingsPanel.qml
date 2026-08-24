@@ -38,20 +38,9 @@ Popup {
     required property var toFractionString
     // Already-parsed max grid aspect ratio; the slider shows it, the text field sets it.
     required property real maxGridAspectRatio
-    // False in the standalone-window host, where the window frame already
-    // provides a title bar, dragging and resizing.
+    // False in the standalone-window host, where PopupWindowLoader's chrome
+    // already provides a title bar, dragging and resizing.
     property bool showChrome: true
-    // When hosted inside a standalone Window (not the switcher popup), this
-    // is set to that Window so the title-bar drag and resize grip move the
-    // window itself instead of the popup within it.
-    property var windowHost: null
-    // The shared RepaintTrick from main.qml; dragging the window host has the
-    // same stale-frame problem as moving any other window from inside KWin.
-    property var repaintTrick: null
-    // What the title-bar drag and the resize grip move: the hosting Window when
-    // there is one, otherwise this popup. Both expose the same x/y/width/height.
-    readonly property var geometryTarget: windowHost || root
-
     // Emitted when the user clicks "Reset position". main.qml handles it
     // differently for the popup host (reset x/y) and the window host (reset
     // the enclosing Window's position to the screen origin).
@@ -77,18 +66,9 @@ Popup {
         opacity: root.showChrome ? 0.97 : 1.0
     }
 
-    // Carries the sidebar/search state when main.qml moves the panel between
-    // its popup and standalone-window hosts.
-    function adoptStateFrom(other) {
-        root.searchText = other.searchText
-        _pendingScrollY = other.scrollContentY
-        _adoptingState = true
-    }
-
-    // Serialise state for transfer across Loader destroy/recreate cycles
-    // (when the standalone window is dismissed by PopupInputFilter and
-    // immediately recreated). adoptStateFrom() takes a live SettingsPanel;
-    // adoptState() takes the plain object returned here.
+    // Carries the sidebar/search state when the panel moves between its popup
+    // and standalone-window hosts, and across the window rebuilds in
+    // PopupWindowLoader.
     function stateForTransfer() {
         return { searchText: root.searchText, scrollY: root.scrollContentY }
     }
@@ -132,7 +112,7 @@ Popup {
         return best
     }
 
-    // Mirrors the Flickable's contentY so adoptStateFrom can copy it.
+    // Mirrors the Flickable's contentY so stateForTransfer can copy it.
     readonly property real scrollContentY: settingsScroll ? settingsScroll.contentY : 0
 
     function scrollToCategory(catId) {
@@ -352,8 +332,9 @@ Popup {
             }
         }
 
-        // Stand-in title bar for the popup host. The standalone window has a
-        // real one, so this and the resize grip below turn off there.
+        // Title bar for the popup host. The standalone window gets a real one
+        // from PopupWindowLoader, so this and the resize grip below turn off
+        // there.
         Rectangle {
             id: titleBar
             visible: root.showChrome
@@ -376,26 +357,9 @@ Popup {
                 font.bold: true
             }
 
-            DragHandler {
-                target: null
-                // activeTranslation is measured in this item's coordinates,
-                // which move along with what we are dragging: once the target
-                // has moved by d, the reported translation is the cursor's
-                // travel minus d. Assigning `start + activeTranslation` (the
-                // obvious form) therefore settles at half the cursor's travel.
-                //
-                // Adding the *remaining* translation to the current position
-                // instead cancels exactly: the target ends up displaced by the
-                // full cursor travel, the next event reports a translation of
-                // zero, and it stays put - 1:1 and self-correcting, with no
-                // start position to keep. (The resize grip needs none of this:
-                // resizing leaves the top-left corner, and thus the coordinate
-                // system, in place.)
-                onActiveTranslationChanged: if (active) {
-                    root.geometryTarget.x += activeTranslation.x
-                    root.geometryTarget.y += activeTranslation.y
-                    root.repaintTrick?.trigger()
-                }
+            PopupWindowDragArea {
+                anchors.fill: parent
+                target: root
             }
         }
 
@@ -1248,10 +1212,15 @@ Popup {
             }
         }
 
-        // Resize grip for the popup host; the window frame handles this in the
-        // standalone one.
-        Item {
+        // Resize grip for the popup host; PopupWindowLoader draws its own in
+        // the standalone window.
+        PopupWindowDragArea {
             visible: root.showChrome
+            enabled: visible
+            target: root
+            resize: true
+            minimumWidth: root.minimumPanelWidth
+            minimumHeight: root.minimumPanelHeight
             width: Kirigami.Units.gridUnit
             height: Kirigami.Units.gridUnit
             anchors.right: parent.right
@@ -1271,20 +1240,6 @@ Popup {
                     anchors.centerIn: parent
                     anchors.horizontalCenterOffset: index * 2
                     anchors.verticalCenterOffset: index * 2
-                }
-            }
-
-            DragHandler {
-                target: null
-                property real startW: 0
-                property real startH: 0
-                onActiveChanged: if (active) {
-                    startW = root.geometryTarget.width
-                    startH = root.geometryTarget.height
-                }
-                onActiveTranslationChanged: if (active) {
-                    root.geometryTarget.width = Math.max(root.minimumPanelWidth, startW + activeTranslation.x)
-                    root.geometryTarget.height = Math.max(root.minimumPanelHeight, startH + activeTranslation.y)
                 }
             }
         }

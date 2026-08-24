@@ -271,6 +271,16 @@ KWin.TabBoxSwitcher {
     // Keeps exactly one settings host open: the popup while the switcher is on
     // screen (a real window would stack behind KWin's overlay), the standalone
     // window once the switcher is gone. Same split as editPopup/editWindow.
+    //
+    // The standalone window is a Qt.Popup so KWin's PopupInputFilter delivers
+    // keyboard events to it. PopupInputFilter also dismisses popups on outside
+    // clicks and focus changes. We refuse that close so the window stays on
+    // screen, but it is no longer tracked and keyboard events stop arriving.
+    // The Window therefore lives inside a Loader: the next click on it
+    // deactivates the Loader (destroying the QWindow and its InternalWindow)
+    // and immediately reactivates it. The fresh InternalWindow is re-tracked by
+    // PopupInputFilter, restoring keyboard delivery. State (search text, scroll
+    // position) survives via a stash.
     function updateSettingsHost() {
         const wantPopup = showPreview && wrapper.visible
         const wantWindow = showPreview && !wrapper.visible
@@ -279,27 +289,43 @@ KWin.TabBoxSwitcher {
         movingSettings = true
         if (!wantPopup && settingsPopup.opened) {
             if (wantWindow)
-                settingsWindowContent.adoptStateFrom(settingsPopup)
+                _settingsStateStash = settingsPopup.stateForTransfer()
             settingsPopup.close()
         }
-        if (!wantWindow && settingsWindow.visible) {
-            if (wantPopup)
-                settingsPopup.adoptStateFrom(settingsWindowContent)
-            settingsWindow.close()
-            settingsWindowContent.close()
+        if (!wantWindow && settingsWindowLoader.active) {
+            if (wantPopup) {
+                const panel = settingsWindowLoader.item ? settingsWindowLoader.item.panel : null
+                if (panel && panel.stateForTransfer)
+                    settingsPopup.adoptState(panel.stateForTransfer())
+            }
+            settingsWindowLoader.staleInput = false
+            settingsWindowLoader.active = false
         }
         // The panel sets `focus: true`, so opening hands it the keyboard.
         if (wantPopup && !settingsPopup.opened)
             settingsPopup.open()
-        if (wantWindow && !settingsWindow.visible) {
-            settingsWindowContent.open()
-            settingsWindow.show()
-            settingsWindow.x = tabBox.screenGeometry.x
-            settingsWindow.y = tabBox.screenGeometry.y
-            settingsWindow.requestActivate()
+        if (wantWindow && !settingsWindowLoader.active) {
+            // A window opened for a new switcher invocation starts from the
+            // default geometry; only the destroy/recreate cycle in
+            // reclaimInput() carries the user's geometry over.
+            settingsWindowLoader.seedGeometry()
+            settingsWindowLoader.active = true
         }
         movingSettings = false
     }
+
+    // Screen rect minus the panels, for placing the standalone settings
+    // window. screenGeometry is the full screen and stays right for the
+    // fullscreen switcher overlay. Falls back to it if KWin gives us nothing.
+    readonly property var workArea: KWin.Workspace?.clientArea(
+                                        KWin.Workspace.PlacementArea,
+                                        KWin.Workspace.activeScreen,
+                                        KWin.Workspace.currentDesktop)
+                                    || tabBox.screenGeometry
+
+    // Stashed state for transferring between popup and window hosts across
+    // Loader destroy/recreate cycles. { searchText, scrollY }
+    property var _settingsStateStash: null
 
     onShowPreviewChanged: {
         updateSettingsHost()
@@ -428,6 +454,7 @@ KWin.TabBoxSwitcher {
                     id: editPopup
                     screenW: tabBox.screenGeometry.width
                     screenH: tabBox.screenGeometry.height
+                    repaintTrick: sharedRepaintTrick
                 }
 
                 // Opaque backing to match original opaque look
@@ -1471,62 +1498,210 @@ KWin.TabBoxSwitcher {
             isPreview: tabBox.isPreview
             toFractionString: tabBox.toFractionString
             maxGridAspectRatio: dialogMainItem.maxGridAspectRatioValue
+            repaintTrick: sharedRepaintTrick
 
             x: 0
             y: 0
-            // Reset size each time the popup opens so it matches the current
-            // screen resolution (the resize grip takes over from here).
-            // End above the settings button so it stays clickable.
-            onVisibleChanged: if (visible)
-                height = wrapper.height - settingsButton.height - Kirigami.Units.largeSpacing * 2
-
-            onResetPosition: {
-                settingsPopup.x = 0
-                settingsPopup.y = 0
-                settingsPopup.width = Kirigami.Units.gridUnit * 46
-                settingsPopup.height = wrapper.height
-                                       - settingsButton.height
-                                       - Kirigami.Units.largeSpacing * 2
+            // Left screen edge, ending above the settings button so that stays
+            // clickable. Dragging and resizing overwrite these (breaking the
+            // x/y bindings), so every open resets the lot - the geometry also
+            // has to follow the current screen resolution.
+            function resetGeometry() {
+                x = 0
+                y = 0
+                width = Kirigami.Units.gridUnit * 46
+                height = wrapper.height - settingsButton.height
+                         - Kirigami.Units.largeSpacing * 2
             }
-            onClosed: if (!settingsWindow.visible) tabBox.showSettings = false
+
+            onVisibleChanged: if (visible) resetGeometry()
+
+            onResetPosition: resetGeometry()
+            onClosed: if (!settingsWindowLoader.active) tabBox.showSettings = false
         }
     }
 
     // The same panel once the switcher is gone, so settings opened during
     // alt-tab stay open and editable afterwards.
-    Window {
-        id: settingsWindow
-        visible: false
-        flags: Qt.Window | Qt.WindowStaysOnTopHint
-        color: Kirigami.Theme.backgroundColor
-        title: "TG++ Settings - " + settings.category
-        width: Kirigami.Units.gridUnit * 46
-        height: tabBox.screenGeometry.height
+    //
+    // The Window is wrapped in a Loader so it can be destroyed and recreated
+    // on the first click after PopupInputFilter dismissed it (outside click,
+    // focus change). A fresh InternalWindow gets re-tracked by
+    // PopupInputFilter, restoring keyboard delivery. State survives via
+    // _settingsStateStash.
+    Loader {
+        id: settingsWindowLoader
+        active: false
 
-        onClosing: if (!tabBox.movingSettings) tabBox.showSettings = false
+        // Set when PopupInputFilter dismissed the window: it is still on
+        // screen but no longer receives keyboard events. Cleared by
+        // reclaimInput(), which destroys and recreates the window so a fresh
+        // InternalWindow gets tracked again.
+        property bool staleInput: false
 
-        SettingsPanel {
-            id: settingsWindowContent
-            showChrome: false
-            x: 0
-            y: 0
-            width: parent.width
-            height: parent.height
+        // The geometry a freshly opened window gets: left edge of the work
+        // area, full work-area height. Unlike the switcher overlay - which is
+        // deliberately fullscreen - this is an ordinary window, so it uses the
+        // placement area and stays clear of the panels. Written to the saved
+        // values, which the window's geometry binds to, so this must happen
+        // before the window is created.
+        function seedGeometry() {
+            const area = tabBox.workArea
+            savedX = area.x
+            savedY = area.y
+            savedWidth = Kirigami.Units.gridUnit * 46
+            savedHeight = area.height
+        }
 
-            cfg: settings
-            defaults: tabBox.settingsDefaults
-            effectModeModel: tabBox.effectModeModel
-            buttonModeModel: tabBox.buttonModeModel
-            isPreview: tabBox.isPreview
-            toFractionString: tabBox.toFractionString
-            maxGridAspectRatio: dialogMainItem.maxGridAspectRatioValue
-
-            onResetPosition: {
-                settingsWindow.x = tabBox.screenGeometry.x
-                settingsWindow.y = tabBox.screenGeometry.y
-                settingsWindow.width = Kirigami.Units.gridUnit * 46
+        // "Reset position" on a window that is already up: reseed, then mirror
+        // onto the live window, whose bindings any earlier drag or resize has
+        // already broken.
+        function resetGeometry() {
+            seedGeometry()
+            if (item) {
+                item.x = savedX
+                item.y = savedY
+                item.width = savedWidth
+                item.height = savedHeight
             }
-            onClosed: settingsWindow.close()
+        }
+
+        // Destroy & recreate the window, preserving panel state and geometry.
+        function reclaimInput() {
+            if (!active || !item)
+                return
+            staleInput = false
+            const panel = item.panel
+            if (panel && panel.stateForTransfer)
+                tabBox._settingsStateStash = panel.stateForTransfer()
+            savedX = item.x
+            savedY = item.y
+            savedWidth = item.width
+            savedHeight = item.height
+            active = false
+            settingsRecreateTimer.start()
+        }
+
+        // Geometry the window binds to, so it survives the destroy/recreate
+        // cycle. Seeded by seedGeometry() before each first creation.
+        property real savedX: 0
+        property real savedY: 0
+        property real savedWidth: Kirigami.Units.gridUnit * 46
+        property real savedHeight: 0
+
+        sourceComponent: Component {
+            Window {
+                id: settingsWindow
+                // Shown explicitly from Loader.onLoaded (after the panel is
+                // opened), mirroring the pre-Loader code path.
+                visible: false
+                flags: Qt.Popup | Qt.WindowStaysOnTopHint
+                color: Kirigami.Theme.backgroundColor
+                title: "TG++ Settings - " + settings.category
+                x: settingsWindowLoader.savedX
+                y: settingsWindowLoader.savedY
+                width: settingsWindowLoader.savedWidth
+                height: settingsWindowLoader.savedHeight
+
+                property bool intentionalClose: false
+                // Window has no `children` property in QML, so expose the
+                // panel explicitly for the Loader's users.
+                property alias panel: settingsWindowContent
+
+                onClosing: (close) => {
+                    if (tabBox.movingSettings) {
+                        close.accepted = true
+                        return
+                    }
+                    if (intentionalClose) {
+                        close.accepted = true
+                        Qt.callLater(() => { tabBox.showSettings = false })
+                        return
+                    }
+                    // PopupInputFilter dismissed us (outside click / focus
+                    // change). Refuse the close so the window stays put; it
+                    // has however stopped being tracked, so keyboard events no
+                    // longer reach it. Mark it stale and rebuild on the next
+                    // click (see reclaimInput below).
+                    close.accepted = false
+                    settingsWindowLoader.staleInput = true
+                }
+
+                // While stale, the window is dimmed to show it is unfocused and
+                // the first click anywhere over it rebuilds it instead of
+                // reaching the controls. Parented to the popup overlay so it
+                // sits above the SettingsPanel popup.
+                MouseArea {
+                    parent: Overlay.overlay
+                    anchors.fill: parent
+                    z: 1000
+                    enabled: settingsWindowLoader.staleInput
+                    visible: enabled
+                    acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+                    onPressed: settingsWindowLoader.reclaimInput()
+
+                    Rectangle {
+                        anchors.fill: parent
+                        color: "black"
+                        opacity: 0.3
+                    }
+                }
+
+                SettingsPanel {
+                    id: settingsWindowContent
+                    showChrome: true
+                    windowHost: settingsWindow
+                    x: 0
+                    y: 0
+                    width: parent.width
+                    height: parent.height
+
+                    cfg: settings
+                    defaults: tabBox.settingsDefaults
+                    effectModeModel: tabBox.effectModeModel
+                    buttonModeModel: tabBox.buttonModeModel
+                    isPreview: tabBox.isPreview
+                    toFractionString: tabBox.toFractionString
+                    maxGridAspectRatio: dialogMainItem.maxGridAspectRatioValue
+                    repaintTrick: sharedRepaintTrick
+
+                    onResetPosition: settingsWindowLoader.resetGeometry()
+                    onClosed: {
+                        settingsWindow.intentionalClose = true
+                        settingsWindow.close()
+                    }
+                }
+            }
+        }
+
+        onLoaded: {
+            const item = settingsWindowLoader.item
+            if (!item)
+                return
+            const panel = item.panel
+            // Open the SettingsPanel popup inside the window.
+            if (panel && panel.open)
+                panel.open()
+            item.show()
+            // Restore state from stash (popup-to-window transfer or recreate).
+            if (_settingsStateStash && panel && panel.adoptState) {
+                panel.adoptState(_settingsStateStash)
+                _settingsStateStash = null
+            }
+        }
+    }
+
+    // 0ms timer ensures the Loader fully deactivates (QWindow destroyed,
+    // InternalWindow removed from workspace) before reactivation creates a
+    // fresh one that PopupInputFilter will track. Started by
+    // settingsWindowLoader.reclaimInput().
+    Timer {
+        id: settingsRecreateTimer
+        interval: 0
+        onTriggered: {
+            if (showPreview && !wrapper.visible
+                    && (!isPreview || settings.showSettingsAfterPreview))
+                settingsWindowLoader.active = true
         }
     }
 
@@ -1597,8 +1772,19 @@ KWin.TabBoxSwitcher {
             height: parent.height
             screenW: tabBox.screenGeometry.width
             screenH: tabBox.screenGeometry.height
+            repaintTrick: sharedRepaintTrick
             onClosed: editWindow.close()
             background: null
         }
+    }
+
+    // One per plugin, shared by everything that moves a window; see
+    // RepaintTrick.qml. Must stay declared *after* the switcher's own `wrapper`
+    // window: KWin takes the first Window it finds here as the switcher
+    // itself, and this one is transparent and empty.
+    RepaintTrick {
+        id: sharedRepaintTrick
+        screenW: tabBox.screenGeometry.width
+        screenH: tabBox.screenGeometry.height
     }
 }

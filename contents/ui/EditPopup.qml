@@ -18,6 +18,9 @@ Popup {
     property int screenW: 1920
     property int screenH: 1080
     property bool showHeaderLabel: true
+    // The shared RepaintTrick from main.qml; moving a window needs a
+    // full-screen repaint or it leaves stale frames behind.
+    property var repaintTrick: null
     modal: false
     closePolicy: Popup.CloseOnPressOutside
     padding: 0
@@ -72,7 +75,7 @@ Popup {
         const win = root.targetWindow
         if (!win) return
         win.frameGeometry = Qt.rect(geoXSpin.value, geoYSpin.value, geoWSpin.value, geoHSpin.value)
-        repaintTrick.trigger()
+        root.repaintTrick?.trigger()
     }
 
     function applyOpacity() {
@@ -262,18 +265,4 @@ Popup {
         }
     }
 
-    Window {
-        id: repaintTrick
-        visible: false
-        flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
-        color: "transparent"
-        x: 0
-        y: 0
-        width: root.screenW
-        height: root.screenH
-        function trigger() {
-            repaintTrick.visible = true
-            Qt.callLater(() => { repaintTrick.visible = false })
-        }
-    }
 }

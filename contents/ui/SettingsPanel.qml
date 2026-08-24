@@ -41,6 +41,16 @@ Popup {
     // False in the standalone-window host, where the window frame already
     // provides a title bar, dragging and resizing.
     property bool showChrome: true
+    // When hosted inside a standalone Window (not the switcher popup), this
+    // is set to that Window so the title-bar drag and resize grip move the
+    // window itself instead of the popup within it.
+    property var windowHost: null
+    // The shared RepaintTrick from main.qml; dragging the window host has the
+    // same stale-frame problem as moving any other window from inside KWin.
+    property var repaintTrick: null
+    // What the title-bar drag and the resize grip move: the hosting Window when
+    // there is one, otherwise this popup. Both expose the same x/y/width/height.
+    readonly property var geometryTarget: windowHost || root
 
     // Emitted when the user clicks "Reset position". main.qml handles it
     // differently for the popup host (reset x/y) and the window host (reset
@@ -72,6 +82,20 @@ Popup {
     function adoptStateFrom(other) {
         root.searchText = other.searchText
         _pendingScrollY = other.scrollContentY
+        _adoptingState = true
+    }
+
+    // Serialise state for transfer across Loader destroy/recreate cycles
+    // (when the standalone window is dismissed by PopupInputFilter and
+    // immediately recreated). adoptStateFrom() takes a live SettingsPanel;
+    // adoptState() takes the plain object returned here.
+    function stateForTransfer() {
+        return { searchText: root.searchText, scrollY: root.scrollContentY }
+    }
+
+    function adoptState(state) {
+        root.searchText = state.searchText || ""
+        _pendingScrollY = state.scrollY || 0
         _adoptingState = true
     }
 
@@ -354,15 +378,23 @@ Popup {
 
             DragHandler {
                 target: null
-                property real startX: 0
-                property real startY: 0
-                onActiveChanged: if (active) {
-                    startX = root.x
-                    startY = root.y
-                }
+                // activeTranslation is measured in this item's coordinates,
+                // which move along with what we are dragging: once the target
+                // has moved by d, the reported translation is the cursor's
+                // travel minus d. Assigning `start + activeTranslation` (the
+                // obvious form) therefore settles at half the cursor's travel.
+                //
+                // Adding the *remaining* translation to the current position
+                // instead cancels exactly: the target ends up displaced by the
+                // full cursor travel, the next event reports a translation of
+                // zero, and it stays put - 1:1 and self-correcting, with no
+                // start position to keep. (The resize grip needs none of this:
+                // resizing leaves the top-left corner, and thus the coordinate
+                // system, in place.)
                 onActiveTranslationChanged: if (active) {
-                    root.x = startX + activeTranslation.x
-                    root.y = startY + activeTranslation.y
+                    root.geometryTarget.x += activeTranslation.x
+                    root.geometryTarget.y += activeTranslation.y
+                    root.repaintTrick?.trigger()
                 }
             }
         }
@@ -1247,12 +1279,12 @@ Popup {
                 property real startW: 0
                 property real startH: 0
                 onActiveChanged: if (active) {
-                    startW = root.width
-                    startH = root.height
+                    startW = root.geometryTarget.width
+                    startH = root.geometryTarget.height
                 }
                 onActiveTranslationChanged: if (active) {
-                    root.width = Math.max(root.minimumPanelWidth, startW + activeTranslation.x)
-                    root.height = Math.max(root.minimumPanelHeight, startH + activeTranslation.y)
+                    root.geometryTarget.width = Math.max(root.minimumPanelWidth, startW + activeTranslation.x)
+                    root.geometryTarget.height = Math.max(root.minimumPanelHeight, startH + activeTranslation.y)
                 }
             }
         }

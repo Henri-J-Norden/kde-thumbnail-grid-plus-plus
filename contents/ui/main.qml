@@ -79,7 +79,8 @@ KWin.TabBoxSwitcher {
     Settings {
         id: settings
         category: tabBox.isAlternative ? "Alt" : "Main"
-        location: StandardPaths.writableLocation(StandardPaths.GenericConfigLocation) + "/kwin_thumbnail_grid_plus.ini"
+        location: StandardPaths.writableLocation(StandardPaths.GenericConfigLocation) + "/kwin_thumbnail_grid_pp.ini"
+
         property bool hoverSelection: true
         property real hoverSelectionMinDeltaGU: 1.0
         property bool showSettingsButton: true

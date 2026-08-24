@@ -1732,11 +1732,15 @@ KWin.TabBoxSwitcher {
             const orig = origGeo || g
             editWindowLoader.open({
                 targetWindow: win,
-                originalX: orig.x, originalY: orig.y,
-                originalWidth: orig.width, originalHeight: orig.height,
-                originalOpacity: origOpacity ?? (win.opacity ?? 1.0),
-                x: g.x, y: g.y, width: g.width, height: g.height,
-                opacity: Math.round((win.opacity ?? 1.0) * 100)
+                original: {
+                    x: orig.x, y: orig.y,
+                    width: orig.width, height: orig.height,
+                    opacity: Math.round((origOpacity ?? (win.opacity ?? 1.0)) * 100)
+                },
+                current: {
+                    x: g.x, y: g.y, width: g.width, height: g.height,
+                    opacity: Math.round((win.opacity ?? 1.0) * 100)
+                }
             })
         }
 
@@ -1746,6 +1750,7 @@ KWin.TabBoxSwitcher {
                 // neither its own heading nor a background of its own.
                 showHeaderLabel: false
                 background: null
+                windowHosted: true
                 x: 0
                 y: 0
                 width: parent.width

@@ -38,69 +38,22 @@ Compared to the stock Thumbnail Grid switcher:
 
 Settings can be reached three ways:
 
-1. **From the switcher itself** — press <kbd>F2</kbd> or click the settings button in the bottom-left corner while Alt+Tab (or whichever shortcut you use) is open. Changes apply immediately.
+1. **From the switcher itself** (recommended) — press <kbd>F2</kbd> or click the settings button in the bottom-left corner while Alt+Tab (or whichever shortcut you use) is open. Changes apply immediately.
 2. **From System Settings → Window Management → Task Switcher**, via the switcher's preview button. Changes made here only take effect after KWin is restarted — log out and back in, or run `kwin_wayland --replace` / `kwin_x11 --replace`.
+	- NB: Not all changes are visible due to the way the preview is implemented by kwin.
 3. **By editing `~/.config/kwin_thumbnail_grid_pp.ini`** directly. The `[Main]` section holds the main switcher's profile and the `[Alt]` section holds the alternative one. Same caveat: KWin must be restarted for the changes to apply.
+
 
 ## Keyboard shortcuts
 
-Available while the switcher is open, acting on the selected window.
-
-### Navigation
-
-| Key | Action |
-| --- | --- |
-| <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> | Move the selection (wraps around) |
-
-### Window actions
-
-| Key | Action |
-| --- | --- |
-| <kbd>Delete</kbd> | Close window — hold to kill the process |
-| <kbd>PgUp</kbd> | Maximize / restore |
-| <kbd>Home</kbd> | Maximize vertically |
-| <kbd>End</kbd> | Maximize horizontally |
-| <kbd>PgDn</kbd> | Minimize / restore |
-| <kbd>F</kbd> | Fullscreen |
-| <kbd>T</kbd> | Hide titlebar & frame |
-| <kbd>D</kbd> | Pin to all desktops |
-| <kbd>A</kbd> | Keep above |
-| <kbd>B</kbd> | Keep below |
-| <kbd>S</kbd> | Shade |
-| <kbd>O</kbd> | Toggle transparency |
-| <kbd>I</kbd> | Hide from screenshots & recordings |
-| <kbd>N</kbd> | Demand attention |
-| <kbd>1</kbd> | Skip taskbar |
-| <kbd>2</kbd> | Skip switcher |
-| <kbd>3</kbd> | Skip pager |
-| <kbd>E</kbd> | Open the geometry editor (<kbd>E</kbd> again or <kbd>Esc</kbd> closes it) |
-
-### Info & tools
-
-| Key | Action |
-| --- | --- |
-| <kbd>Space</kbd> | Open the copy menu (<kbd>Space</kbd> or <kbd>Esc</kbd> closes it) |
-| <kbd>P</kbd> | Copy the window's PID |
-| <kbd>H</kbd> | Open htop on the window's process |
-| <kbd>F12</kbd> | Show window debug info |
-| <kbd>F2</kbd> | Toggle the settings panel |
-
-### Inside the copy menu
-
-| Key | Action |
-| --- | --- |
-| <kbd>↑</kbd> <kbd>↓</kbd> | Move between entries |
-| <kbd>Enter</kbd> | Copy the highlighted entry |
-| Underlined letter | Jump to and copy that entry directly |
-| <kbd>←</kbd> <kbd>→</kbd> <kbd>Tab</kbd> | Move the grid selection; the menu follows |
-| <kbd>Space</kbd> / <kbd>Esc</kbd> | Close the menu |
+Press <kbd>F1</kbd> while the switcher is open to see an in-app cheat sheet of all available shortcuts. All shortcuts can be customized from the settings panel.
 
 
 ## Limitations (TODO)
-- Keyboard shortcuts cannot be customized or disabled.
-- There is no central help overlay (e.g. with `F1`) for listing all keyboard shortcuts.
 - The Settings and Edit windows are kwin internal windows, which means they are always on top and do not show up in the taskbar or task switcher.
-    - This does not apply to the Debug window, which uses `kdialog` as a workaround.
+	- This does not apply to the Debug window, which uses `kdialog` as a workaround.
+- Window buttons cannot be reordered.
+
 
 ## Credits
 

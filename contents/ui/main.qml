@@ -1115,6 +1115,11 @@ KWin.TabBoxSwitcher {
                                     return windows.find(w => w.internalId === windowId) || null;
                                 }
 
+                                // The model role isn't reachable from outside
+                                // the delegate; the buttons need it to notice
+                                // the cell being re-bound under a held press.
+                                readonly property var cellWindowId: windowId
+
                                 property bool maximizable: window?.maximizable ?? false
                                 property bool minimizable: window?.minimizable ?? false
 

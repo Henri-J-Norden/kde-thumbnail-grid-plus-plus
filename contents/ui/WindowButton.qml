@@ -89,7 +89,26 @@ Loader {
     readonly property bool fired: holding
                                   && (holdExternal ? holdExternalFired : holdFired)
 
+    // internalId of the window this cell currently shows. Delegates are shared:
+    // when a row disappears the Repeater re-binds the survivors rather than
+    // destroying the one that went, so the button under a held pointer can end
+    // up pointing at a different window mid-press. Everything the button does
+    // acts on that new window, so a press that outlives its target is dropped.
+    readonly property var targetId: cell ? cell.cellWindowId : null
+    // The id captured when the pointer went down, and whether it still matches.
+    property var pressedTargetId: null
+    readonly property bool pressedTargetLost:
+        pressedDown && pressedTargetId !== null && targetId !== pressedTargetId
+
+    onPressedTargetLostChanged: if (pressedTargetLost) {
+        // Cancel the hold and mark the press spent, so the release neither
+        // kills nor toggles the window that moved in underneath it.
+        holdTimer.stop()
+        holdFired = true
+    }
+
     onPressedDownChanged: {
+        if (pressedDown) pressedTargetId = targetId
         if (!holdEnabled) return
         if (pressedDown) {
             holdFired = false
@@ -101,6 +120,11 @@ Loader {
 
     // Called by the styles on release. Swallows the click that ends a hold.
     function activate() {
+        // A press whose window went away (or was replaced) is not a click.
+        if (pressedTargetLost) {
+            holdFired = false
+            return
+        }
         if (holdFired) {
             holdFired = false
             return
@@ -126,6 +150,7 @@ Loader {
     onActiveChanged: if (!active) {
         pressedDown = false
         holdFired = false
+        pressedTargetId = null
     }
 
     // Fills the entire button from bottom to top over `holdMs`; when the

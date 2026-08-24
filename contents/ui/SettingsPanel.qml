@@ -155,12 +155,26 @@ Popup {
             root.cfg[key] = root.defaults[key]
     }
 
-    // Human-readable rendering of a default value for tooltips.
-    function formatDefault(key) {
-        const v = root.defaults[key]
+    // Human-readable rendering of a value for tooltips.
+    function formatValue(v) {
         if (v === undefined) return ""
         if (typeof v === "boolean") return v ? "on" : "off"
         return String(v)
+    }
+
+    // Human-readable rendering of a default value for tooltips.
+    function formatDefault(key) {
+        return root.formatValue(root.defaults[key])
+    }
+
+    // "key: default → current" per line, for the footer-label hover tooltip.
+    readonly property string changedSettingsText: {
+        let lines = []
+        for (const key in root.defaults)
+            if (root.cfg[key] !== root.defaults[key])
+                lines.push(key + ": " + root.formatValue(root.defaults[key])
+                           + " → " + root.formatValue(root.cfg[key]))
+        return lines.join("\n")
     }
 
     // A titled block of settings belonging to one category. Rows added by the
@@ -186,7 +200,9 @@ Popup {
             for (let i = 0; i < section.children.length; ++i) {
                 const child = section.children[i]
                 if (child.searchKey !== undefined
-                        && child.searchKey.toLowerCase().indexOf(needle) >= 0)
+                        && (child.searchKey.toLowerCase().indexOf(needle) >= 0
+                            || (child.cfgKey !== undefined && child.cfgKey !== ""
+                                && child.cfgKey.toLowerCase().indexOf(needle) >= 0)))
                     return true
                 // SettingsMatrix:
                 if (child.shownRows !== undefined && child.shownRows.length > 0)
@@ -202,7 +218,9 @@ Popup {
                 const child = section.children[i]
                 if (child.searchKey !== undefined) {
                     if (root.searchText.length === 0 || section.titleMatch
-                            || child.searchKey.toLowerCase().indexOf(needle) >= 0)
+                            || child.searchKey.toLowerCase().indexOf(needle) >= 0
+                            || (child.cfgKey !== undefined && child.cfgKey !== ""
+                                && child.cfgKey.toLowerCase().indexOf(needle) >= 0))
                         n++
                 } else if (child.shownRows !== undefined) {
                     for (let j = 0; j < child.shownRows.length; ++j) {
@@ -238,14 +256,25 @@ Popup {
     }
 
     // One setting inside a Section. `searchKey` is what the search box matches.
+    // `cfgKey` is auto-detected from the HelpLabel child so rows are also
+    // searchable by their config property name.
     component SettingRow: RowLayout {
         id: settingRow
         property string searchKey: ""
+        readonly property string cfgKey: {
+            for (let i = 0; i < settingRow.children.length; ++i) {
+                const c = settingRow.children[i]
+                if (c.cfgKey !== undefined && c.cfgKey !== "")
+                    return c.cfgKey
+            }
+            return ""
+        }
         // Section.anyMatch reads this; the whole section stays visible when its
         // own title matched, so individual rows must not filter themselves out.
         visible: root.searchText.length === 0
                  || parent.titleMatch
                  || searchKey.toLowerCase().indexOf(root.searchText.toLowerCase()) >= 0
+                 || cfgKey.toLowerCase().indexOf(root.searchText.toLowerCase()) >= 0
         Layout.fillWidth: true
         spacing: Kirigami.Units.smallSpacing
     }
@@ -271,11 +300,13 @@ Popup {
         color: isChanged ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
         ToolTip.text: {
             let t = help
+            if (cfgKey !== "")
+                t += (t !== "" ? "\n\n" : "") + "‣ Setting: " + cfgKey
             if (isChanged)
-                t += (t !== "" ? "\n\n" : "") + "Default: " + defaultText
+                t += (t !== "" ? "\n" : "") + "‣ Default: " + defaultText
             return t
         }
-        ToolTip.visible: (help !== "" || isChanged) && maHelp.containsMouse
+        ToolTip.visible: (help !== "" || cfgKey !== "" || isChanged) && maHelp.containsMouse
         ToolTip.delay: 0
         MouseArea {
             id: maHelp
@@ -1149,6 +1180,7 @@ Popup {
                     spacing: Kirigami.Units.smallSpacing
 
                     PlasmaComponents3.Label {
+                        id: footerLabel
                         text: root.changedCount === 0
                               ? "All settings are at their defaults"
                               : root.changedCount + (root.changedCount === 1 ? " setting differs" : " settings differ") + " from defaults"
@@ -1158,6 +1190,14 @@ Popup {
                         elide: Text.ElideRight
                         Layout.fillWidth: true
                         Layout.minimumWidth: 0
+                        ToolTip.text: root.changedSettingsText
+                        ToolTip.visible: root.changedCount > 0 && maFooter.containsMouse
+                        ToolTip.delay: 0
+                        MouseArea {
+                            id: maFooter
+                            anchors.fill: parent
+                            hoverEnabled: true
+                        }
                     }
                     PlasmaComponents3.Button {
                         text: "Reset position"

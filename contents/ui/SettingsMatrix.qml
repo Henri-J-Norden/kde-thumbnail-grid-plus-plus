@@ -50,7 +50,8 @@ ColumnLayout {
                 pendingGroup = r
                 continue
             }
-            if (r.label.toLowerCase().indexOf(f) >= 0) {
+            if (r.label.toLowerCase().indexOf(f) >= 0
+                    || (r.key !== undefined && r.key.toLowerCase().indexOf(f) >= 0)) {
                 if (pendingGroup) {
                     out.push(pendingGroup)
                     pendingGroup = null
@@ -139,8 +140,17 @@ ColumnLayout {
                 Layout.preferredWidth: root.labelWidth
                 Layout.topMargin: matrixRow.isGroup ? Kirigami.Units.smallSpacing : 0
 
-                ToolTip.text: matrixRow.defaultLabel
-                ToolTip.visible: matrixRow.defaultLabel !== "" && maRowLabel.containsMouse
+                ToolTip.text: {
+                    let t = ""
+                    if (!matrixRow.isGroup && matrixRow.modelData.key !== undefined)
+                        t += "‣ Setting: " + matrixRow.modelData.key
+                    if (matrixRow.isChanged)
+                        t += (t !== "" ? "\n" : "") + "‣ " + matrixRow.defaultLabel
+                    return t
+                }
+                ToolTip.visible: !matrixRow.isGroup
+                    && matrixRow.modelData.key !== undefined
+                    && maRowLabel.containsMouse
                 ToolTip.delay: 0
                 MouseArea {
                     id: maRowLabel

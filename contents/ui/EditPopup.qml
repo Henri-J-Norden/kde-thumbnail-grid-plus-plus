@@ -18,6 +18,7 @@ Popup {
     property int screenW: 1920
     property int screenH: 1080
     property bool showHeaderLabel: true
+    property int shortcutEditKey: Qt.Key_E
     // The shared RepaintTrick from main.qml; moving anything from inside KWin
     // needs a full-screen repaint or it leaves stale frames behind.
     property var repaintTrick: null
@@ -121,7 +122,7 @@ Popup {
     }
 
     Keys.onPressed: (event) => {
-        if (event.key === Qt.Key_E) {
+        if (event.key === root.shortcutEditKey) {
             root.cancelGeometry()
             event.accepted = true
         }

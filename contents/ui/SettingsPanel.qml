@@ -937,16 +937,6 @@ Popup {
                                 Layout.fillWidth: true
                             }
 
-                            PlasmaComponents3.Label {
-                                text: "Close and Debug are on/off only — modes 1–3 and 5 need a window state to reflect."
-                                font.pointSize: Kirigami.Theme.smallFont.pointSize
-                                color: Kirigami.Theme.disabledTextColor
-                                visible: buttonMatrix.visible
-                                wrapMode: Text.Wrap
-                                Layout.fillWidth: true
-                                Layout.topMargin: Kirigami.Units.smallSpacing
-                            }
-
                             SettingRow {
                                 searchKey: "window transparency button opacity"
                                 HelpLabel {
@@ -1058,7 +1048,7 @@ Popup {
                             SettingRow {
                                 searchKey: "copy menu window properties"
                                 HelpLabel {
-                                    plain: "Copy menu"
+                                    plain: "Show/hide copy menu"
                                     cfgKey: "shortcutCopyMenu"
                                     help: "Open the copy menu for the selected window's properties (caption, geometry, etc.)."
                                     Layout.preferredWidth: Kirigami.Units.gridUnit * 11
@@ -1080,7 +1070,7 @@ Popup {
                             SettingRow {
                                 searchKey: "edit window geometry popup"
                                 HelpLabel {
-                                    plain: "Edit window"
+                                    plain: "Show/hide edit window"
                                     cfgKey: "shortcutEdit"
                                     help: "Open the geometry editor for the selected window."
                                     Layout.preferredWidth: Kirigami.Units.gridUnit * 11
@@ -1124,7 +1114,7 @@ Popup {
                             SettingRow {
                                 searchKey: "settings panel configure toggle"
                                 HelpLabel {
-                                    plain: "Toggle settings"
+                                    plain: "Show/hide settings"
                                     cfgKey: "shortcutSettings"
                                     help: "Open or close the settings panel."
                                     Layout.preferredWidth: Kirigami.Units.gridUnit * 11
@@ -1138,6 +1128,28 @@ Popup {
                                     target: kcfSettings
                                     property: "keyCode"
                                     value: root.cfg.shortcutSettings
+                                    restoreMode: Binding.RestoreBindingOrValue
+                                }
+                                Item { Layout.fillWidth: true }
+                            }
+
+                            SettingRow {
+                                searchKey: "shortcuts popup help cheat sheet f1"
+                                HelpLabel {
+                                    plain: "Shortcuts popup"
+                                    cfgKey: "shortcutShortcutsPopup"
+                                    help: "Show or hide the on-screen shortcuts cheat sheet."
+                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 11
+                                }
+                                KeyCaptureField {
+                                    id: kcfShortcutsPopup
+                                    onKeyCaptured: root.cfg.shortcutShortcutsPopup = keyCode
+                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 4
+                                }
+                                Binding {
+                                    target: kcfShortcutsPopup
+                                    property: "keyCode"
+                                    value: root.cfg.shortcutShortcutsPopup
                                     restoreMode: Binding.RestoreBindingOrValue
                                 }
                                 Item { Layout.fillWidth: true }

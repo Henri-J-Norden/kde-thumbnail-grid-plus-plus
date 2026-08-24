@@ -132,6 +132,7 @@ Popup {
         { id: "icons",      name: "Icons & labels",     glyph: "◉" },
         { id: "minimized",  name: "Minimized windows",  glyph: "▁" },
         { id: "buttons",    name: "Window buttons",     glyph: "◧" },
+        { id: "shortcuts",  name: "Other shortcuts",    glyph: "⌨" },
         { id: "advanced",   name: "Meta & preview",     glyph: "⚙" }
     ]
 
@@ -326,7 +327,7 @@ Popup {
         focus: true
 
         Keys.onPressed: (event) => {
-            if (event.key === Qt.Key_F2 || event.key === Qt.Key_Escape) {
+            if (event.key === root.cfg.shortcutSettings || event.key === Qt.Key_Escape) {
                 root.close()
                 event.accepted = true
             }
@@ -907,28 +908,29 @@ Popup {
                                     "Only visible on hover, never as a badge.",
                                     "Only visible while active, always as a badge."
                                 ])
+                                showShortcuts: true
                                 rows: [
                                     { group: "Left — status" },
-                                    { label: "Pin", key: "buttonPin" },
-                                    { label: "Keep above", key: "buttonKeepAbove" },
-                                    { label: "Keep below", key: "buttonKeepBelow" },
-                                    { label: "Fullscreen", key: "buttonFullscreen" },
-                                    { label: "No titlebar", key: "buttonNoBorder" },
-                                    { label: "Incognito", key: "buttonIncognito" },
-                                    { label: "Demands attention", key: "buttonDemandsAttention" },
-                                    { label: "Shaded", key: "buttonShaded" },
-                                    { label: "Transparency", key: "buttonTransparency" },
-                                    { label: "Skip taskbar", key: "buttonSkipTaskbar" },
-                                    { label: "Skip switcher", key: "buttonSkipSwitcher" },
-                                    { label: "Skip pager", key: "buttonSkipPager" },
+                                    { label: "Pin", key: "buttonPin", shortcutKey: "shortcutPin" },
+                                    { label: "Keep above", key: "buttonKeepAbove", shortcutKey: "shortcutKeepAbove" },
+                                    { label: "Keep below", key: "buttonKeepBelow", shortcutKey: "shortcutKeepBelow" },
+                                    { label: "Fullscreen", key: "buttonFullscreen", shortcutKey: "shortcutFullscreen" },
+                                    { label: "No titlebar", key: "buttonNoBorder", shortcutKey: "shortcutNoBorder" },
+                                    { label: "Incognito", key: "buttonIncognito", shortcutKey: "shortcutIncognito" },
+                                    { label: "Demands attention", key: "buttonDemandsAttention", shortcutKey: "shortcutDemandsAttention" },
+                                    { label: "Shaded", key: "buttonShaded", shortcutKey: "shortcutShaded" },
+                                    { label: "Transparency", key: "buttonTransparency", shortcutKey: "shortcutTransparency" },
+                                    { label: "Skip taskbar", key: "buttonSkipTaskbar", shortcutKey: "shortcutSkipTaskbar" },
+                                    { label: "Skip switcher", key: "buttonSkipSwitcher", shortcutKey: "shortcutSkipSwitcher" },
+                                    { label: "Skip pager", key: "buttonSkipPager", shortcutKey: "shortcutSkipPager" },
                                     { group: "Right — actions" },
-                                    { label: "Minimize", key: "buttonMinimize" },
-                                    { label: "Maximize", key: "buttonMaximize" },
-                                    { label: "Maximize horizontally", key: "buttonMaximizeHorizontal" },
-                                    { label: "Maximize vertically", key: "buttonMaximizeVertical" },
-                                    { label: "Kill (active = unresponsive)", key: "buttonKill" },
-                                    { label: "Close (hold to kill)", key: "buttonClose", boolOnly: true },
-                                    { label: "Debug", key: "buttonDebug", boolOnly: true }
+                                    { label: "Minimize", key: "buttonMinimize", shortcutKey: "shortcutMinimize" },
+                                    { label: "Maximize", key: "buttonMaximize", shortcutKey: "shortcutMaximize" },
+                                    { label: "Maximize horizontally", key: "buttonMaximizeHorizontal", shortcutKey: "shortcutMaximizeHorizontal" },
+                                    { label: "Maximize vertically", key: "buttonMaximizeVertical", shortcutKey: "shortcutMaximizeVertical" },
+                                    { label: "Kill (active = unresponsive)", key: "buttonKill", shortcutKey: "shortcutKill" },
+                                    { label: "Close (hold to kill)", key: "buttonClose", boolOnly: true, shortcutKey: "shortcutClose" },
+                                    { label: "Debug", key: "buttonDebug", boolOnly: true, shortcutKey: "shortcutDebug" }
                                 ]
                                 filter: parent.titleMatch ? "" : root.searchText
                                 visible: shownRows.length > 0
@@ -1021,6 +1023,124 @@ Popup {
                                     help: "Sort property keys alphabetically in the output of dumpProperties (Debug button). When off, keys appear in their natural enumeration order."
                                     onLabelClicked: cbDumpSortKeys.toggle()
                                 }
+                            }
+                        }
+
+                        // ---- Other shortcuts ------------------------------------
+                        Section {
+                            id: shortcutsSection
+                            cat: "shortcuts"
+                            title: "Other shortcuts"
+                            description: "Keyboard shortcuts for actions that are not window buttons."
+
+                            SettingRow {
+                                searchKey: "copy pid clipboard"
+                                HelpLabel {
+                                    plain: "Copy PID"
+                                    cfgKey: "shortcutCopyPid"
+                                    help: "Copy the selected window's process ID to the clipboard."
+                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 11
+                                }
+                                KeyCaptureField {
+                                    id: kcfCopyPid
+                                    onKeyCaptured: root.cfg.shortcutCopyPid = keyCode
+                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 4
+                                }
+                                Binding {
+                                    target: kcfCopyPid
+                                    property: "keyCode"
+                                    value: root.cfg.shortcutCopyPid
+                                    restoreMode: Binding.RestoreBindingOrValue
+                                }
+                                Item { Layout.fillWidth: true }
+                            }
+
+                            SettingRow {
+                                searchKey: "copy menu window properties"
+                                HelpLabel {
+                                    plain: "Copy menu"
+                                    cfgKey: "shortcutCopyMenu"
+                                    help: "Open the copy menu for the selected window's properties (caption, geometry, etc.)."
+                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 11
+                                }
+                                KeyCaptureField {
+                                    id: kcfCopyMenu
+                                    onKeyCaptured: root.cfg.shortcutCopyMenu = keyCode
+                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 4
+                                }
+                                Binding {
+                                    target: kcfCopyMenu
+                                    property: "keyCode"
+                                    value: root.cfg.shortcutCopyMenu
+                                    restoreMode: Binding.RestoreBindingOrValue
+                                }
+                                Item { Layout.fillWidth: true }
+                            }
+
+                            SettingRow {
+                                searchKey: "edit window geometry popup"
+                                HelpLabel {
+                                    plain: "Edit window"
+                                    cfgKey: "shortcutEdit"
+                                    help: "Open the geometry editor for the selected window."
+                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 11
+                                }
+                                KeyCaptureField {
+                                    id: kcfEdit
+                                    onKeyCaptured: root.cfg.shortcutEdit = keyCode
+                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 4
+                                }
+                                Binding {
+                                    target: kcfEdit
+                                    property: "keyCode"
+                                    value: root.cfg.shortcutEdit
+                                    restoreMode: Binding.RestoreBindingOrValue
+                                }
+                                Item { Layout.fillWidth: true }
+                            }
+
+                            SettingRow {
+                                searchKey: "htop terminal process"
+                                HelpLabel {
+                                    plain: "Open htop"
+                                    cfgKey: "shortcutHtop"
+                                    help: "Open a terminal running htop for the selected window's process."
+                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 11
+                                }
+                                KeyCaptureField {
+                                    id: kcfHtop
+                                    onKeyCaptured: root.cfg.shortcutHtop = keyCode
+                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 4
+                                }
+                                Binding {
+                                    target: kcfHtop
+                                    property: "keyCode"
+                                    value: root.cfg.shortcutHtop
+                                    restoreMode: Binding.RestoreBindingOrValue
+                                }
+                                Item { Layout.fillWidth: true }
+                            }
+
+                            SettingRow {
+                                searchKey: "settings panel configure toggle"
+                                HelpLabel {
+                                    plain: "Toggle settings"
+                                    cfgKey: "shortcutSettings"
+                                    help: "Open or close the settings panel."
+                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 11
+                                }
+                                KeyCaptureField {
+                                    id: kcfSettings
+                                    onKeyCaptured: root.cfg.shortcutSettings = keyCode
+                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 4
+                                }
+                                Binding {
+                                    target: kcfSettings
+                                    property: "keyCode"
+                                    value: root.cfg.shortcutSettings
+                                    restoreMode: Binding.RestoreBindingOrValue
+                                }
+                                Item { Layout.fillWidth: true }
                             }
                         }
 

@@ -4,7 +4,7 @@
  */
 
 import QtQuick
-import org.kde.plasma.components 3.0 as PlasmaComponents3
+import QtQuick.Controls
 
 // A TextField that can still be typed into while hosted inside KWin.
 //
@@ -25,8 +25,12 @@ import org.kde.plasma.components 3.0 as PlasmaComponents3
 // keys, AltGr and input methods are not reachable at all - KWin never gives an
 // internal window a text-input focus. Fine for the short numeric/search
 // entries here, not a general-purpose text editor.
-PlasmaComponents3.TextField {
+TextField {
     id: root
+
+    padding: 0
+    implicitHeight: fontMetrics.height + 4
+    FontMetrics { id: fontMetrics; font: root.font }
 
     readonly property var shiftedAscii: ({
         "1": "!", "2": "@", "3": "#", "4": "$", "5": "%",

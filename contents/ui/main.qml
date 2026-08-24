@@ -58,6 +58,27 @@ KWin.TabBoxSwitcher {
         return (!isNaN(v) && v > 0) ? v : 0
     }
 
+    function keyName(key) {
+        if (key === 0) return "—"
+        if (key >= Qt.Key_A && key <= Qt.Key_Z)
+            return String.fromCharCode(key)
+        if (key >= Qt.Key_0 && key <= Qt.Key_9)
+            return String.fromCharCode(key)
+        const special = {
+            [Qt.Key_PageUp]: "PgUp", [Qt.Key_PageDown]: "PgDn",
+            [Qt.Key_Home]: "Home", [Qt.Key_End]: "End",
+            [Qt.Key_Delete]: "Del", [Qt.Key_Space]: "Space",
+            [Qt.Key_Insert]: "Ins", [Qt.Key_Return]: "Ret",
+            [Qt.Key_Enter]: "Enter", [Qt.Key_Tab]: "Tab",
+            [Qt.Key_Backtab]: "BkTab", [Qt.Key_Escape]: "Esc",
+            [Qt.Key_Backspace]: "BkSp",
+        }
+        if (special[key]) return special[key]
+        if (key >= Qt.Key_F1 && key <= Qt.Key_F35)
+            return "F" + (key - Qt.Key_F1 + 1)
+        return "Key_" + key
+    }
+
     function toFractionString(value) {
         if (value <= 0) return "0"
         const tolerance = 0.005
@@ -146,6 +167,33 @@ KWin.TabBoxSwitcher {
         property int closeHoldMs: 2000
         property bool buttonDebug: false
         property bool dumpSortKeys: false
+
+        // Keyboard shortcut key codes (Qt.Key_* values). 0 = no shortcut.
+        property int shortcutPin: Qt.Key_D
+        property int shortcutKeepAbove: Qt.Key_A
+        property int shortcutKeepBelow: Qt.Key_B
+        property int shortcutFullscreen: Qt.Key_F
+        property int shortcutNoBorder: Qt.Key_T
+        property int shortcutIncognito: Qt.Key_I
+        property int shortcutDemandsAttention: Qt.Key_N
+        property int shortcutShaded: Qt.Key_S
+        property int shortcutTransparency: Qt.Key_O
+        property int shortcutSkipTaskbar: Qt.Key_1
+        property int shortcutSkipSwitcher: Qt.Key_2
+        property int shortcutSkipPager: Qt.Key_3
+        property int shortcutMaximize: Qt.Key_PageUp
+        property int shortcutMaximizeHorizontal: Qt.Key_End
+        property int shortcutMaximizeVertical: Qt.Key_Home
+        property int shortcutMinimize: Qt.Key_PageDown
+        property int shortcutKill: 0
+        property int shortcutClose: Qt.Key_Delete
+        property int shortcutDebug: Qt.Key_F12
+        // Non-button shortcuts:
+        property int shortcutCopyPid: Qt.Key_P
+        property int shortcutCopyMenu: Qt.Key_Space
+        property int shortcutEdit: Qt.Key_E
+        property int shortcutHtop: Qt.Key_H
+        property int shortcutSettings: Qt.Key_F2
     }
 
     // Defaults for SettingsPanel's "differs from defaults" count and its Restore
@@ -213,6 +261,31 @@ KWin.TabBoxSwitcher {
         closeHoldMs: 2000,
         buttonDebug: false,
         dumpSortKeys: false,
+
+        shortcutPin: Qt.Key_D,
+        shortcutKeepAbove: Qt.Key_A,
+        shortcutKeepBelow: Qt.Key_B,
+        shortcutFullscreen: Qt.Key_F,
+        shortcutNoBorder: Qt.Key_T,
+        shortcutIncognito: Qt.Key_I,
+        shortcutDemandsAttention: Qt.Key_N,
+        shortcutShaded: Qt.Key_S,
+        shortcutTransparency: Qt.Key_O,
+        shortcutSkipTaskbar: Qt.Key_1,
+        shortcutSkipSwitcher: Qt.Key_2,
+        shortcutSkipPager: Qt.Key_3,
+        shortcutMaximize: Qt.Key_PageUp,
+        shortcutMaximizeHorizontal: Qt.Key_End,
+        shortcutMaximizeVertical: Qt.Key_Home,
+        shortcutMinimize: Qt.Key_PageDown,
+        shortcutKill: 0,
+        shortcutClose: Qt.Key_Delete,
+        shortcutDebug: Qt.Key_F12,
+        shortcutCopyPid: Qt.Key_P,
+        shortcutCopyMenu: Qt.Key_Space,
+        shortcutEdit: Qt.Key_E,
+        shortcutHtop: Qt.Key_H,
+        shortcutSettings: Qt.Key_F2,
     })
 
     // Labels for the mode settings above. Deliberately not declared inside Settings:
@@ -391,7 +464,7 @@ KWin.TabBoxSwitcher {
             checked: tabBox.showSettings
             onCheckedChanged: tabBox.showSettings = checked
             visible: settings.showSettingsButton && tabBox.animationFinished
-            PlasmaComponents3.ToolTip.text: i18n("Settings [F2]")
+            PlasmaComponents3.ToolTip.text: i18n("Settings [" + tabBox.keyName(settings.shortcutSettings) + "]")
             PlasmaComponents3.ToolTip.visible: hovered
             PlasmaComponents3.ToolTip.delay: Kirigami.Units.toolTipDelay
         }
@@ -818,47 +891,47 @@ KWin.TabBoxSwitcher {
                     const idx = tabBox.model.index(tabBox.currentIndex, 0)
                     const window = currentWindow()
 
-                    if (key === Qt.Key_PageUp) {
+                    if (key === settings.shortcutMaximize) {
                         if (window) { const isMax = window.frameGeometry.width >= tabBox.screenGeometry.width - 1; window.setMaximize(!isMax, !isMax) }
-                    } else if (key === Qt.Key_PageDown) {
+                    } else if (key === settings.shortcutMinimize) {
                         if (window) window.minimized = !window.minimized;
-                    } else if (key === Qt.Key_Home) {
+                    } else if (key === settings.shortcutMaximizeVertical) {
                         if (window) { const area = KWin.Workspace?.clientArea(KWin.Workspace.MaximizeArea, window); const isV = window.frameGeometry.height >= area?.height - 1; const isH = window.frameGeometry.width >= area?.width - 1; window.setMaximize(!isV, isH) }
-                    } else if (key === Qt.Key_End) {
+                    } else if (key === settings.shortcutMaximizeHorizontal) {
                         if (window) { const area = KWin.Workspace?.clientArea(KWin.Workspace.MaximizeArea, window); const isV = window.frameGeometry.height >= area?.height - 1; const isH = window.frameGeometry.width >= area?.width - 1; window.setMaximize(isV, !isH) }
-                    } else if (key === Qt.Key_F) {
+                    } else if (key === settings.shortcutFullscreen) {
                         if (window) window.fullScreen = !window.fullScreen
-                    } else if (key === Qt.Key_T) {
+                    } else if (key === settings.shortcutNoBorder) {
                         if (window) window.noBorder = !window.noBorder
-                    } else if (key === Qt.Key_A) {
+                    } else if (key === settings.shortcutKeepAbove) {
                         if (window) window.keepAbove = !window.keepAbove
-                    } else if (key === Qt.Key_B) {
+                    } else if (key === settings.shortcutKeepBelow) {
                         if (window) window.keepBelow = !window.keepBelow
-                    } else if (key === Qt.Key_I) {
+                    } else if (key === settings.shortcutIncognito) {
                         if (window) window.excludeFromCapture = !window.excludeFromCapture
-                    } else if (key === Qt.Key_D) {
+                    } else if (key === settings.shortcutPin) {
                         if (window) window.onAllDesktops = !window.onAllDesktops
-                    } else if (key === Qt.Key_N) {
+                    } else if (key === settings.shortcutDemandsAttention) {
                         if (window) window.demandsAttention = !window.demandsAttention
-                    } else if (key === Qt.Key_S) {
+                    } else if (key === settings.shortcutShaded) {
                         if (window) window.shaded = !window.shaded
-                    } else if (key === Qt.Key_O) {
+                    } else if (key === settings.shortcutTransparency) {
                         if (window) window.opacity = (window.opacity < 0.999) ? 1.0 : settings.opacityWindow
-                    } else if (key === Qt.Key_1) {
+                    } else if (key === settings.shortcutSkipTaskbar) {
                         if (window) window.skipTaskbar = !window.skipTaskbar
-                    } else if (key === Qt.Key_3) {
+                    } else if (key === settings.shortcutSkipPager) {
                         if (window) window.skipPager = !window.skipPager
-                    } else if (key === Qt.Key_2) {
+                    } else if (key === settings.shortcutSkipSwitcher) {
                         if (window) window.skipSwitcher = !window.skipSwitcher
-                    } else if (key === Qt.Key_P) {
+                    } else if (key === settings.shortcutCopyPid) {
                         if (window) {
                             clipboard.content = String(window.pid)
                         }
-                    } else if (key === Qt.Key_Space) {
+                    } else if (key === settings.shortcutCopyMenu) {
                         if (window) copyMenu.show(window, currentDelegatePosition())
-                    } else if (key === Qt.Key_E) {
+                    } else if (key === settings.shortcutEdit) {
                         if (window) editPopup.openFor(window, currentDelegatePosition())
-                    } else if (key === Qt.Key_H) {
+                    } else if (key === settings.shortcutHtop) {
                         if (window?.pid) {
                             // $TERMINAL overrides the terminal configured in KDE
                             // (kdeglobals [General] TerminalApplication, what KIO's
@@ -868,9 +941,9 @@ KWin.TabBoxSwitcher {
                                 + " --group General --key TerminalApplication 2>/dev/null)}\";"
                                 + " \"${term:-konsole}\" -e htop -p " + window.pid)
                         }
-                    } else if (key === Qt.Key_F2) {
+                    } else if (key === settings.shortcutSettings) {
                         tabBox.showSettings = !tabBox.showSettings
-                    } else if (key === Qt.Key_F12) {
+                    } else if (key === settings.shortcutDebug) {
                         var caption = tabBox.model.data(idx, captionRole)
                         executableSource.showDebugInfo(window, caption)
                     } else {
@@ -881,7 +954,7 @@ KWin.TabBoxSwitcher {
 
                 Keys.onPressed: (event) => {
                     if (event.isAutoRepeat) autoRepeatFlagged = true
-                    if (event.key === Qt.Key_Delete) {
+                    if (event.key === settings.shortcutClose) {
                         event.accepted = true
                         if (isCloseRepeat(event)) {
                             continueCloseHold()
@@ -1150,8 +1223,8 @@ KWin.TabBoxSwitcher {
                                                     mode: settings.buttonPin
                                                     checked: window?.onAllDesktops ?? false
                                                     iconName: "window-pin-symbolic"
-                                                    tooltipChecked: "Unpin from all desktops [D]"
-                                                    tooltipUnchecked: "Pin to all desktops [D]"
+                                                    tooltipChecked: "Unpin from all desktops [" + tabBox.keyName(settings.shortcutPin) + "]"
+                                                    tooltipUnchecked: "Pin to all desktops [" + tabBox.keyName(settings.shortcutPin) + "]"
                                                     onToggled: window.onAllDesktops = !window.onAllDesktops
                                                 }
 
@@ -1161,8 +1234,8 @@ KWin.TabBoxSwitcher {
                                                     mode: settings.buttonKeepBelow
                                                     checked: window?.keepBelow ?? false
                                                     iconName: "window-keep-below-symbolic"
-                                                    tooltipChecked: "Remove keep below [B]"
-                                                    tooltipUnchecked: "Keep below [B]"
+                                                    tooltipChecked: "Remove keep below [" + tabBox.keyName(settings.shortcutKeepBelow) + "]"
+                                                    tooltipUnchecked: "Keep below [" + tabBox.keyName(settings.shortcutKeepBelow) + "]"
                                                     onToggled: window.keepBelow = !window.keepBelow
                                                 }
 
@@ -1172,8 +1245,8 @@ KWin.TabBoxSwitcher {
                                                     mode: settings.buttonKeepAbove
                                                     checked: window?.keepAbove ?? false
                                                     iconName: "window-keep-above-symbolic"
-                                                    tooltipChecked: "Remove keep above [A]"
-                                                    tooltipUnchecked: "Keep above [A]"
+                                                    tooltipChecked: "Remove keep above [" + tabBox.keyName(settings.shortcutKeepAbove) + "]"
+                                                    tooltipUnchecked: "Keep above [" + tabBox.keyName(settings.shortcutKeepAbove) + "]"
                                                     onToggled: window.keepAbove = !window.keepAbove
                                                 }
 
@@ -1184,8 +1257,8 @@ KWin.TabBoxSwitcher {
                                                     checked: window?.fullScreen ?? false
                                                     supported: window?.fullScreenable ?? false
                                                     iconName: "view-fullscreen-symbolic"
-                                                    tooltipChecked: "Exit fullscreen [F]"
-                                                    tooltipUnchecked: "Fullscreen [F]"
+                                                    tooltipChecked: "Exit fullscreen [" + tabBox.keyName(settings.shortcutFullscreen) + "]"
+                                                    tooltipUnchecked: "Fullscreen [" + tabBox.keyName(settings.shortcutFullscreen) + "]"
                                                     onToggled: window.fullScreen = !window.fullScreen
                                                 }
 
@@ -1195,8 +1268,8 @@ KWin.TabBoxSwitcher {
                                                     mode: settings.buttonNoBorder
                                                     checked: window?.noBorder ?? false
                                                     iconName: "window-decorations-symbolic"
-                                                    tooltipChecked: "Unhide titlebar & frame [T]"
-                                                    tooltipUnchecked: "Hide titlebar & frame [T]"
+                                                    tooltipChecked: "Unhide titlebar & frame [" + tabBox.keyName(settings.shortcutNoBorder) + "]"
+                                                    tooltipUnchecked: "Hide titlebar & frame [" + tabBox.keyName(settings.shortcutNoBorder) + "]"
                                                     onToggled: window.noBorder = !window.noBorder
                                                 }
 
@@ -1206,8 +1279,8 @@ KWin.TabBoxSwitcher {
                                                     mode: settings.buttonIncognito
                                                     checked: window?.excludeFromCapture ?? false
                                                     iconName: "view-private-symbolic"
-                                                    tooltipChecked: "Disable hide from capture [I]"
-                                                    tooltipUnchecked: "Hide from screenshots/recordings [I]"
+                                                    tooltipChecked: "Disable hide from capture [" + tabBox.keyName(settings.shortcutIncognito) + "]"
+                                                    tooltipUnchecked: "Hide from screenshots/recordings [" + tabBox.keyName(settings.shortcutIncognito) + "]"
                                                     onToggled: window.excludeFromCapture = !window.excludeFromCapture
                                                 }
 
@@ -1218,8 +1291,8 @@ KWin.TabBoxSwitcher {
                                                     checked: window?.demandsAttention ?? false
                                                     blink: true
                                                     iconName: "notifications-symbolic"
-                                                    tooltipChecked: "Remove attention demand [N]"
-                                                    tooltipUnchecked: "Demand attention [N]"
+                                                    tooltipChecked: "Remove attention demand [" + tabBox.keyName(settings.shortcutDemandsAttention) + "]"
+                                                    tooltipUnchecked: "Demand attention [" + tabBox.keyName(settings.shortcutDemandsAttention) + "]"
                                                     onToggled: window.demandsAttention = !window.demandsAttention
                                                 }
 
@@ -1230,8 +1303,8 @@ KWin.TabBoxSwitcher {
                                                     checked: window?.shaded ?? false
                                                     supported: window?.shadeable ?? false
                                                     iconName: "window-shade-symbolic"
-                                                    tooltipChecked: "Unshade [S]"
-                                                    tooltipUnchecked: "Shade [S]"
+                                                    tooltipChecked: "Unshade [" + tabBox.keyName(settings.shortcutShaded) + "]"
+                                                    tooltipUnchecked: "Shade [" + tabBox.keyName(settings.shortcutShaded) + "]"
                                                     onToggled: window.shaded = !window.shaded
                                                 }
 
@@ -1241,8 +1314,8 @@ KWin.TabBoxSwitcher {
                                                     mode: settings.buttonTransparency
                                                     checked: isTransparent
                                                     iconName: "edit-opacity-symbolic"
-                                                    tooltipChecked: "Make opaque [O]"
-                                                    tooltipUnchecked: "Make transparent [O]"
+                                                    tooltipChecked: "Make opaque [" + tabBox.keyName(settings.shortcutTransparency) + "]"
+                                                    tooltipUnchecked: "Make transparent [" + tabBox.keyName(settings.shortcutTransparency) + "]"
                                                     onToggled: window.opacity = isTransparent ? 1.0 : settings.opacityWindow
                                                 }
 
@@ -1252,8 +1325,8 @@ KWin.TabBoxSwitcher {
                                                     mode: settings.buttonSkipTaskbar
                                                     checked: window?.skipTaskbar ?? false
                                                     iconName: "view-tasks-all-symbolic"
-                                                    tooltipChecked: "Show in taskbar [1]"
-                                                    tooltipUnchecked: "Skip taskbar [1]"
+                                                    tooltipChecked: "Show in taskbar [" + tabBox.keyName(settings.shortcutSkipTaskbar) + "]"
+                                                    tooltipUnchecked: "Skip taskbar [" + tabBox.keyName(settings.shortcutSkipTaskbar) + "]"
                                                     onToggled: window.skipTaskbar = !window.skipTaskbar
                                                 }
 
@@ -1263,8 +1336,8 @@ KWin.TabBoxSwitcher {
                                                     mode: settings.buttonSkipSwitcher
                                                     checked: window?.skipSwitcher ?? false
                                                     iconName: "window-list"
-                                                    tooltipChecked: "Show in switcher [2]"
-                                                    tooltipUnchecked: "Skip switcher [2]"
+                                                    tooltipChecked: "Show in switcher [" + tabBox.keyName(settings.shortcutSkipSwitcher) + "]"
+                                                    tooltipUnchecked: "Skip switcher [" + tabBox.keyName(settings.shortcutSkipSwitcher) + "]"
                                                     onToggled: window.skipSwitcher = !window.skipSwitcher
                                                 }
 
@@ -1274,8 +1347,8 @@ KWin.TabBoxSwitcher {
                                                     mode: settings.buttonSkipPager
                                                     checked: window?.skipPager ?? false
                                                     iconName: "window-duplicate-symbolic"
-                                                    tooltipChecked: "Show in pager [3]"
-                                                    tooltipUnchecked: "Skip pager [3]"
+                                                    tooltipChecked: "Show in pager [" + tabBox.keyName(settings.shortcutSkipPager) + "]"
+                                                    tooltipUnchecked: "Skip pager [" + tabBox.keyName(settings.shortcutSkipPager) + "]"
                                                     onToggled: window.skipPager = !window.skipPager
                                                 }
                                             }
@@ -1311,7 +1384,7 @@ KWin.TabBoxSwitcher {
                                                     mode: settings.buttonClose ? tabBox.buttonModeOnHover : 0
                                                     supported: model.closeable
                                                     iconName: "window-close-symbolic"
-                                                    tooltipUnchecked: holdEnabled ? "Close [Del]\nHold to kill" : "Close [Del]"
+                                                    tooltipUnchecked: holdEnabled ? "Close [" + tabBox.keyName(settings.shortcutClose) + "]\nHold to kill" : "Close [" + tabBox.keyName(settings.shortcutClose) + "]"
                                                     holdMs: settings.closeHoldMs
                                                     // Remote X11 clients report no usable PID; close only.
                                                     holdSupported: (window?.pid ?? 0) > 0
@@ -1338,8 +1411,8 @@ KWin.TabBoxSwitcher {
                                                     supported: maximizable
                                                     iconName: "window-maximize-symbolic"
                                                     iconNameChecked: "window-restore-symbolic"
-                                                    tooltipChecked: "Unmaximize [PgUp]"
-                                                    tooltipUnchecked: "Maximize [PgUp]"
+                                                    tooltipChecked: "Unmaximize [" + tabBox.keyName(settings.shortcutMaximize) + "]"
+                                                    tooltipUnchecked: "Maximize [" + tabBox.keyName(settings.shortcutMaximize) + "]"
                                                     onToggled: if (window) window.setMaximize(!isMaximized, !isMaximized)
                                                 }
 
@@ -1350,8 +1423,8 @@ KWin.TabBoxSwitcher {
                                                     checked: isMaximizedHorizontal
                                                     supported: maximizable
                                                     iconName: "transform-move-horizontal-symbolic"
-                                                    tooltipChecked: "Unmaximize horizontally [End]"
-                                                    tooltipUnchecked: "Maximize horizontally [End]"
+                                                    tooltipChecked: "Unmaximize horizontally [" + tabBox.keyName(settings.shortcutMaximizeHorizontal) + "]"
+                                                    tooltipUnchecked: "Maximize horizontally [" + tabBox.keyName(settings.shortcutMaximizeHorizontal) + "]"
                                                     // setMaximize takes (vertically, horizontally)
                                                     onToggled: if (window) window.setMaximize(isMaximizedVertical, !isMaximizedHorizontal)
                                                 }
@@ -1363,8 +1436,8 @@ KWin.TabBoxSwitcher {
                                                     checked: isMaximizedVertical
                                                     supported: maximizable
                                                     iconName: "transform-move-vertical-symbolic"
-                                                    tooltipChecked: "Unmaximize vertically [Home]"
-                                                    tooltipUnchecked: "Maximize vertically [Home]"
+                                                    tooltipChecked: "Unmaximize vertically [" + tabBox.keyName(settings.shortcutMaximizeVertical) + "]"
+                                                    tooltipUnchecked: "Maximize vertically [" + tabBox.keyName(settings.shortcutMaximizeVertical) + "]"
                                                     // setMaximize takes (vertically, horizontally)
                                                     onToggled: if (window) window.setMaximize(!isMaximizedVertical, isMaximizedHorizontal)
                                                 }
@@ -1377,8 +1450,8 @@ KWin.TabBoxSwitcher {
                                                     supported: minimizable
                                                     iconName: "window-minimize-symbolic"
                                                     iconNameChecked: "window-restore-symbolic"
-                                                    tooltipChecked: "Unminimize [PgDn]"
-                                                    tooltipUnchecked: "Minimize [PgDn]"
+                                                    tooltipChecked: "Unminimize [" + tabBox.keyName(settings.shortcutMinimize) + "]"
+                                                    tooltipUnchecked: "Minimize [" + tabBox.keyName(settings.shortcutMinimize) + "]"
                                                     onToggled: window.minimized = !window.minimized
                                                 }
 
@@ -1387,7 +1460,7 @@ KWin.TabBoxSwitcher {
                                                     cell: cell
                                                     mode: settings.buttonDebug ? tabBox.buttonModeOnHover : 0
                                                     iconName: "info-symbolic"
-                                                    tooltipUnchecked: "Show window debug info [F12]"
+                                                    tooltipUnchecked: "Show window debug info [" + tabBox.keyName(settings.shortcutDebug) + "]"
                                                     onToggled: executableSource.showDebugInfo(window, model.caption)
                                                 }
                                             }

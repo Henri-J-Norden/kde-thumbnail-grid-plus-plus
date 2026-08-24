@@ -27,6 +27,9 @@ ColumnLayout {
     property int boolOnMode: 4
     // Case-insensitive substring filter; empty shows every row.
     property string filter: ""
+    // When true, an extra column is appended for keyboard shortcut capture.
+    property bool showShortcuts: false
+    property real shortcutColumnWidth: Kirigami.Units.gridUnit * 4
 
     // Property-name -> default value, same object as SettingsPanel.defaults.
     // Drives the "changed from default" highlight and the default-column marker.
@@ -51,7 +54,8 @@ ColumnLayout {
                 continue
             }
             if (r.label.toLowerCase().indexOf(f) >= 0
-                    || (r.key !== undefined && r.key.toLowerCase().indexOf(f) >= 0)) {
+                    || (r.key !== undefined && r.key.toLowerCase().indexOf(f) >= 0)
+                    || (r.shortcutKey !== undefined && r.shortcutKey.toLowerCase().indexOf(f) >= 0)) {
                 if (pendingGroup) {
                     out.push(pendingGroup)
                     pendingGroup = null
@@ -99,6 +103,15 @@ ColumnLayout {
                     MouseArea { id: maHeader; anchors.fill: parent; hoverEnabled: true }
                 }
             }
+        }
+
+        PlasmaComponents3.Label {
+            text: "Shortcut"
+            font.bold: true
+            horizontalAlignment: Text.AlignHCenter
+            Layout.preferredWidth: root.shortcutColumnWidth
+            Layout.alignment: Qt.AlignHCenter | Qt.AlignBottom
+            visible: root.showShortcuts
         }
     }
 
@@ -212,6 +225,27 @@ ColumnLayout {
                         anchors.horizontalCenterOffset: cellRadio.implicitWidth * 0.5 - 3
                         anchors.verticalCenterOffset: cellRadio.implicitWidth * 0.5 - 3
                     }
+                }
+            }
+
+            Item {
+                Layout.preferredWidth: root.shortcutColumnWidth
+                implicitHeight: keyCapture.implicitHeight
+                visible: root.showShortcuts && !matrixRow.isGroup
+
+                KeyCaptureField {
+                    id: keyCapture
+                    anchors.fill: parent
+                    onKeyCaptured: root.cfg[matrixRow.modelData.shortcutKey] = keyCode
+                    visible: root.showShortcuts && !matrixRow.isGroup
+                                 && matrixRow.modelData.shortcutKey !== undefined
+                }
+
+                Binding {
+                    target: keyCapture
+                    property: "keyCode"
+                    value: root.cfg[matrixRow.modelData.shortcutKey] ?? 0
+                    restoreMode: Binding.RestoreBindingOrValue
                 }
             }
         }

@@ -462,56 +462,6 @@ Popup {
                             title: "Grid & layout"
                             description: "How the grid of thumbnails is sized and placed on screen."
 
-                            SettingRow {
-                                searchKey: "max grid aspect ratio ultrawide"
-                                HelpLabel {
-                                    plain: "Max grid aspect ratio"
-                                    cfgKey: "maxGridAspectRatioInput"
-                                    help: "Limits how wide the grid of windows can be relative to its height. \n" +
-                                          "Useful for ultrawide displays, to prevent the task switcher from becoming too wide. \n\n" +
-                                          "E.g. 21:9 means that: \n" +
-                                          "- on monitors wider than 21:9, the grid will stay within a central 21:9 rectangle, \n" +
-                                          "- on monitors narrower than 21:9, the limit is the width of the monitor. \n\n" +
-                                          "Set to 0 for no limit (always uses the width of the monitor as the limit). \n\n" +
-                                          "Note: you can test the effect of this setting by increasing \"Preview repeat count\"."
-                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 11
-                                }
-                                PlasmaComponents3.Slider {
-                                    from: 0.0
-                                    to: 5.0
-                                    stepSize: 0.01
-                                    value: Math.max(0, Math.min(5, root.maxGridAspectRatio))
-                                    onMoved: root.cfg.maxGridAspectRatioInput = root.toFractionString(value)
-                                    Layout.fillWidth: true
-                                }
-                                KwinTextField {
-                                    text: root.cfg.maxGridAspectRatioInput
-                                    onTextEdited: root.cfg.maxGridAspectRatioInput = text
-                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 5
-                                }
-                                PlasmaComponents3.Label {
-                                    text: root.maxGridAspectRatio > 0
-                                          ? "= " + root.maxGridAspectRatio.toFixed(2)
-                                          : "no limit"
-                                    color: Kirigami.Theme.disabledTextColor
-                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 4
-                                }
-                            }
-
-                            SettingRow {
-                                searchKey: "lock grid width columns reflow"
-                                PlasmaComponents3.CheckBox {
-                                    id: cbLockGridWidth
-                                    checked: root.cfg.lockGridWidth
-                                    onCheckedChanged: root.cfg.lockGridWidth = checked
-                                }
-                                HelpLabel {
-                                    plain: "Lock grid width"
-                                    cfgKey: "lockGridWidth"
-                                    help: "Keep the number of columns fixed while the task switcher is open, so the grid doesn't reflow horizontally when windows are opened or closed. Still widens if the grid would otherwise overflow the screen vertically."
-                                    onLabelClicked: cbLockGridWidth.toggle()
-                                }
-                            }
 
                             SettingRow {
                                 searchKey: "background opacity dim"
@@ -581,6 +531,121 @@ Popup {
                                     Layout.preferredWidth: Kirigami.Units.gridUnit * 7
                                 }
                             }
+
+                            SettingRow {
+                                searchKey: "max grid aspect ratio ultrawide"
+                                HelpLabel {
+                                    plain: "Max grid aspect ratio"
+                                    cfgKey: "maxGridAspectRatioInput"
+                                    help: "Limits how wide the grid of windows can be relative to its height. \n" +
+                                          "Useful for ultrawide displays, to prevent the task switcher from becoming too wide. \n\n" +
+                                          "E.g. 21:9 means that: \n" +
+                                          "- on monitors wider than 21:9, the grid will stay within a central 21:9 rectangle, \n" +
+                                          "- on monitors narrower than 21:9, the limit is the width of the monitor. \n\n" +
+                                          "Set to 0 for no limit (always uses the width of the monitor as the limit). \n\n" +
+                                          "Note: you can test the effect of this setting by increasing \"Preview repeat count\"."
+                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 11
+                                }
+                                PlasmaComponents3.Slider {
+                                    from: 0.0
+                                    to: 5.0
+                                    stepSize: 0.01
+                                    value: Math.max(0, Math.min(5, root.maxGridAspectRatio))
+                                    onMoved: root.cfg.maxGridAspectRatioInput = root.toFractionString(value)
+                                    Layout.fillWidth: true
+                                }
+                                KwinTextField {
+                                    text: root.cfg.maxGridAspectRatioInput
+                                    onTextEdited: root.cfg.maxGridAspectRatioInput = text
+                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 5
+                                }
+                                PlasmaComponents3.Label {
+                                    text: root.maxGridAspectRatio > 0
+                                          ? "= " + root.maxGridAspectRatio.toFixed(2)
+                                          : "no limit"
+                                    color: Kirigami.Theme.disabledTextColor
+                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 4
+                                }
+                            }
+
+                            SettingRow {
+                                searchKey: "max grid width screen fraction fill"
+                                HelpLabel {
+                                    plain: "Max grid width"
+                                    cfgKey: "gridWidthFraction"
+                                    help: "Maximum width the grid can occupy as a fraction of the available screen width (after the max grid aspect ratio is applied). \n\n" +
+                                          "Lower values leave more empty space on the sides."
+                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 11
+                                }
+                                PlasmaComponents3.Slider {
+                                    from: 0.1
+                                    to: 1.0
+                                    stepSize: 0.01
+                                    value: root.cfg.gridWidthFraction
+                                    onMoved: root.cfg.gridWidthFraction = value
+                                    Layout.fillWidth: true
+                                }
+                                PlasmaComponents3.Label {
+                                    text: Math.round(root.cfg.gridWidthFraction * 100) + "%"
+                                    horizontalAlignment: Text.AlignRight
+                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 3
+                                }
+                            }
+
+                            SettingRow {
+                                searchKey: "max grid height screen fraction fill"
+                                HelpLabel {
+                                    plain: "Max grid height"
+                                    cfgKey: "gridHeightFraction"
+                                    help: "Maximum height the grid can occupy as a fraction of the screen height (after the max grid aspect ratio is applied). \n\n" +
+                                          "This is the primary layout constraint: the column-count algorithm picks the fewest columns that keep all rows within this height. \n\n" +
+                                          "Lower values leave more empty space at the top and bottom."
+                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 11
+                                }
+                                PlasmaComponents3.Slider {
+                                    from: 0.1
+                                    to: 1.0
+                                    stepSize: 0.01
+                                    value: root.cfg.gridHeightFraction
+                                    onMoved: root.cfg.gridHeightFraction = value
+                                    Layout.fillWidth: true
+                                }
+                                PlasmaComponents3.Label {
+                                    text: Math.round(root.cfg.gridHeightFraction * 100) + "%"
+                                    horizontalAlignment: Text.AlignRight
+                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 3
+                                }
+                            }
+
+                            SettingRow {
+                                searchKey: "lock grid width columns reflow"
+                                PlasmaComponents3.CheckBox {
+                                    id: cbLockGridWidth
+                                    checked: root.cfg.lockGridWidth
+                                    onCheckedChanged: root.cfg.lockGridWidth = checked
+                                }
+                                HelpLabel {
+                                    plain: "Lock grid width"
+                                    cfgKey: "lockGridWidth"
+                                    help: "Keep the number of columns fixed while the task switcher is open, so the grid doesn't reflow horizontally when windows are opened or closed. Still widens if the grid would otherwise overflow the screen vertically."
+                                    onLabelClicked: cbLockGridWidth.toggle()
+                                }
+                            }
+
+                            SettingRow {
+                                searchKey: "lock grid y position vertical stable"
+                                PlasmaComponents3.CheckBox {
+                                    id: cbLockGridYPosition
+                                    checked: root.cfg.lockGridYPosition
+                                    onCheckedChanged: root.cfg.lockGridYPosition = checked
+                                }
+                                HelpLabel {
+                                    plain: "Lock grid Y position"
+                                    cfgKey: "lockGridYPosition"
+                                    help: "Keep the grid's vertical position fixed while the task switcher is open, so the grid doesn't shift up or down when windows are opened or closed and rows are added or removed. Still shifts up if the grid would otherwise overflow the bottom of the screen."
+                                    onLabelClicked: cbLockGridYPosition.toggle()
+                                }
+                            }
                         }
 
                         // ---- Thumbnails ----------------------------------
@@ -609,7 +674,7 @@ Popup {
                             }
 
                             SettingRow {
-                                searchKey: "thumbnail height aspect ratio"
+                                searchKey: "thumbnail height aspect ratio ultrawide"
                                 HelpLabel {
                                     plain: "Thumbnail height"
                                     cfgKey: "thumbnailHeightInput"

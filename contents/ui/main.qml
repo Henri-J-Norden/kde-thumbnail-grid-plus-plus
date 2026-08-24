@@ -86,12 +86,15 @@ KWin.TabBoxSwitcher {
         property bool showSettingsAfterPreview: true
         property bool showProtocol: true
         property bool lockGridWidth: true
+        property bool lockGridYPosition: true
         property bool centerHighlightButtons: true
 
         property int thumbnailWidthGridUnits: 16
         property string thumbnailHeightInput: "16:10"
         property string maxGridAspectRatioInput: "21:9"
-        
+        property real gridWidthFraction: 0.9
+        property real gridHeightFraction: 0.8
+
         property int previewRepeatCount: 1
         property real buttonSize: 1.6
 
@@ -155,11 +158,14 @@ KWin.TabBoxSwitcher {
         showSettingsAfterPreview: false,
         showProtocol: true,
         lockGridWidth: true,
+        lockGridYPosition: true,
         centerHighlightButtons: true,
 
         thumbnailWidthGridUnits: 16,
         thumbnailHeightInput: "16:10",
         maxGridAspectRatioInput: "21:9",
+        gridWidthFraction: 0.9,
+        gridHeightFraction: 0.8,
 
         previewRepeatCount: 1,
         buttonSize: 1.6,
@@ -336,9 +342,12 @@ KWin.TabBoxSwitcher {
 
         onVisibleChanged: {
             dialogMainItem.lockedColumns = 0
+            dialogMainItem.lockedY = -1
             // Latch after the model has populated for this invocation.
             if (visible && settings.lockGridWidth)
                 Qt.callLater(() => dialogMainItem.lockedColumns = dialogMainItem.columns)
+            if (visible && settings.lockGridYPosition)
+                Qt.callLater(() => dialogMainItem.lockedY = wnd.y)
             // The settings panel follows the switcher between its two hosts.
             tabBox.updateSettingsHost()
         }
@@ -368,7 +377,14 @@ KWin.TabBoxSwitcher {
 
         Item {
             id: wnd
-            anchors.centerIn: parent
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: {
+                if (settings.lockGridYPosition && dialogMainItem.lockedY >= 0) {
+                    let maxY = wrapper.height - wnd.height
+                    return Math.max(0, Math.min(dialogMainItem.lockedY, maxY))
+                }
+                return Math.max(0, (wrapper.height - wnd.height) / 2)
+            }
             
             // Main Item Container
             FocusScope {
@@ -470,9 +486,9 @@ KWin.TabBoxSwitcher {
                 property int maxW: {
                     const ratio = maxGridAspectRatioValue
                     const cap = ratio > 0 ? Math.min(ratio * maxH, tabBox.screenGeometry.width) : tabBox.screenGeometry.width
-                    return cap * 0.9
+                    return cap * settings.gridWidthFraction
                 }
-                property int maxH: tabBox.screenGeometry.height * 0.8
+                property int maxH: tabBox.screenGeometry.height * settings.gridHeightFraction
                 
                 // Greedy Algorithm from original Thumbnail Grid to balance rows/cols
                 function columnCountRecursion(prevC, prevBestC, prevDiff) {
@@ -510,6 +526,9 @@ KWin.TabBoxSwitcher {
                 // Latched on open so the grid doesn't reflow horizontally when
                 // windows are closed mid-session. 0 = not latched yet.
                 property int lockedColumns: 0
+                // Latched on open so the grid doesn't shift vertically when rows
+                // are added or removed mid-session. -1 = not latched yet.
+                property real lockedY: -1
 
                 // Fewest columns that keep itemCount rows within maxH.
                 readonly property int minColumnsByHeight: {

@@ -794,6 +794,8 @@ KWin.TabBoxSwitcher {
 
                 function cancelCloseHold() {
                     closeRepeatTimer.stop()
+                    closeReleaseTimer.stop()
+                    closeHoldBlocked = false
                     closeHoldArmed = false
                     closeHoldConfirmed = false
                     closeHoldConfirmedMs = 0
@@ -834,10 +836,29 @@ KWin.TabBoxSwitcher {
                     const sinceLast = now - closeHoldLast
                     closeHoldLast = now
                     if (autoRepeatFlagged) return event.isAutoRepeat
-                    // Once the hold's window is gone it closed as asked, so a
-                    // further press is a new one however fast it arrived.
-                    return closeHoldArmed && closeHoldTargetAlive()
-                        && sinceLast <= closeRepeatTimer.interval
+                    const gap = closeHoldBlocked ? closeReleaseTimer.interval
+                                                 : closeRepeatTimer.interval
+                    return (closeHoldArmed || closeHoldBlocked)
+                        && sinceLast <= gap
+                }
+
+                // A hold whose window went away is over, but the key is still
+                // down and its repeats keep arriving. Without this the next
+                // repeat would read as a fresh press and close whatever got
+                // selected in the meantime, marching through the switcher.
+                // Further repeats are swallowed until they stop, i.e. until the
+                // key is actually released.
+                property bool closeHoldBlocked: false
+
+                Timer {
+                    id: closeReleaseTimer
+                    interval: dialogMainItem.nextRepeatInterval
+                    onTriggered: dialogMainItem.closeHoldBlocked = false
+                }
+
+                function blockUntilCloseReleased() {
+                    closeHoldBlocked = true
+                    closeReleaseTimer.restart()
                 }
 
                 function beginCloseHold() {
@@ -953,8 +974,22 @@ KWin.TabBoxSwitcher {
                     if (event.isAutoRepeat) autoRepeatFlagged = true
                     if (event.key === settings.shortcutClose) {
                         event.accepted = true
-                        if (isCloseRepeat(event)) {
-                            continueCloseHold()
+                        const repeat = isCloseRepeat(event)
+                        if (closeHoldBlocked) {
+                            // Still held from a hold that already ended.
+                            if (repeat) { closeReleaseTimer.restart(); return }
+                            closeHoldBlocked = false
+                            closeReleaseTimer.stop()
+                        }
+                        if (repeat && closeHoldArmed) {
+                            if (closeHoldTargetAlive()) {
+                                continueCloseHold()
+                            } else {
+                                // It closed as asked; hold ends here and the
+                                // key has to come up before another close.
+                                cancelCloseHold()
+                                blockUntilCloseReleased()
+                            }
                         } else {
                             beginCloseHold()
                         }

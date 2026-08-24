@@ -783,7 +783,7 @@ KWin.TabBoxSwitcher {
                 function closeHoldTargetAlive() {
                     if (closeHoldWindow === null) return false
                     const windows = KWin.Workspace?.stackingOrder || []
-                    return windows.some(w => w.internalId === closeHoldWindow)
+                    return windows.some(w => closeHoldWindow === (w.transientFor?.internalId ?? w.internalId))
                 }
 
                 function closeWindowAt(index) {
@@ -863,8 +863,10 @@ KWin.TabBoxSwitcher {
 
                 function beginCloseHold() {
                     const win = currentWindow()
-                    closeHoldPid = win?.pid ?? 0
-                    closeHoldWindow = win?.internalId ?? null
+                    // org.kde.kwin.killer dialog is a transient for the unresponsive window.
+                    const target = win?.transientFor ?? win
+                    closeHoldPid = target?.pid ?? 0
+                    closeHoldWindow = target?.internalId ?? null
                     closeHoldConfirmed = false
                     closeHoldConfirmedMs = 0
                     closeHoldConfirmedAt = 0
@@ -1118,7 +1120,7 @@ KWin.TabBoxSwitcher {
                                 // The model role isn't reachable from outside
                                 // the delegate; the buttons need it to notice
                                 // the cell being re-bound under a held press.
-                                readonly property var cellWindowId: windowId
+                                readonly property var cellWindowId: (window?.transientFor?.internalId ?? windowId)
 
                                 property bool maximizable: window?.maximizable ?? false
                                 property bool minimizable: window?.minimizable ?? false
@@ -1405,7 +1407,7 @@ KWin.TabBoxSwitcher {
                                                 WindowButton {
                                                     cell: cell
                                                     mode: settings.buttonKill
-                                                    checked: window?.unresponsive ?? false
+                                                    checked: (window?.transientFor ?? window)?.unresponsive ?? false
                                                     supported: (window?.pid ?? 0) > 0  // Remote X11 clients report no usable PID (not supported)
                                                     iconName: "process-stop-symbolic"
                                                     tooltipChecked: "Kill process\n(Window is unresponsive)"

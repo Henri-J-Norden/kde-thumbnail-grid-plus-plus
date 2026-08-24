@@ -94,7 +94,7 @@ Loader {
     // destroying the one that went, so the button under a held pointer can end
     // up pointing at a different window mid-press. Everything the button does
     // acts on that new window, so a press that outlives its target is dropped.
-    readonly property var targetId: cell ? cell.cellWindowId : null
+    readonly property var targetId: cell?.cellWindowId ?? null
     // The id captured when the pointer went down, and whether it still matches.
     property var pressedTargetId: null
     readonly property bool pressedTargetLost:

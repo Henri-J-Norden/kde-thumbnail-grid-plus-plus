@@ -13,6 +13,7 @@ import "keyutils.js" as KeyUtils
 Popup {
     id: root
     required property var cfg
+    required property int customCommandCount
     property int screenW: 1920
     property int screenH: 1080
 
@@ -59,17 +60,26 @@ Popup {
         { label: "Maximize vertically", key: "shortcutMaximizeVertical" },
         { label: "Minimize", key: "shortcutMinimize" },
         { label: "Close (hold to kill)", key: "shortcutClose" },
-        { label: "Debug info", key: "shortcutDebug" },
     ]
 
     readonly property var utilityShortcuts: [
         { label: "Copy PID", key: "shortcutCopyPid" },
         { label: "Copy menu", key: "shortcutCopyMenu" },
         { label: "Edit geometry", key: "shortcutEdit" },
-        { label: "Htop", key: "shortcutHtop" },
         { label: "Settings", key: "shortcutSettings" },
         { label: "Shortcuts (this popup)", key: "shortcutShortcutsPopup" },
     ]
+
+    // Only the custom-command slots that have a command; they have no names of
+    // their own, so the command string itself is the label.
+    readonly property var customShortcuts: {
+        var out = []
+        for (var i = 0; i < root.customCommandCount; ++i) {
+            if (root.cfg["customCommand" + i])
+                out.push({ label: root.cfg["customCommand" + i], key: "shortcutCustom" + i })
+        }
+        return out
+    }
 
     function showPopup() {
         // x/y are relative to the parent item, and anything outside it is
@@ -227,6 +237,57 @@ Popup {
                         }
                         PlasmaComponents3.Label {
                             text: modelData.label
+                            Layout.fillWidth: true
+                            opacity: disabled ? 0.4 : 1.0
+                        }
+                    }
+                }
+            }
+
+            Kirigami.Separator {
+                Layout.fillWidth: true
+                visible: root.customShortcuts.length > 0
+            }
+
+            // --- Custom commands section ----------------------------
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Kirigami.Units.smallSpacing
+                visible: root.customShortcuts.length > 0
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Kirigami.Units.smallSpacing
+                    Item { Layout.preferredWidth: Kirigami.Units.gridUnit * 6 }
+                    PlasmaComponents3.Label {
+                        text: "Custom commands"
+                        font.bold: true
+                        color: Kirigami.Theme.highlightColor
+                        Layout.fillWidth: true
+                    }
+                }
+
+                Repeater {
+                    model: root.customShortcuts
+                    delegate: RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Kirigami.Units.smallSpacing
+                        readonly property string keyText: KeyUtils.keyName(root.cfg[modelData.key])
+                        readonly property bool disabled: root.cfg[modelData.key] === 0
+                        PlasmaComponents3.Label {
+                            text: keyText
+                            font.family: "monospace"
+                            font.bold: true
+                            color: Kirigami.Theme.highlightColor
+                            opacity: disabled ? 0.4 : 1.0
+                            Layout.preferredWidth: Kirigami.Units.gridUnit * 6
+                            horizontalAlignment: Text.AlignRight
+                        }
+                        PlasmaComponents3.Label {
+                            text: modelData.label
+                            font.family: "monospace"
+                            font.pointSize: Kirigami.Theme.smallFont.pointSize
+                            elide: Text.ElideRight
                             Layout.fillWidth: true
                             opacity: disabled ? 0.4 : 1.0
                         }

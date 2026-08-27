@@ -159,23 +159,70 @@ KWin.TabBoxSwitcher {
         property int shortcutDemandsAttention: Qt.Key_N
         property int shortcutShaded: Qt.Key_S
         property int shortcutTransparency: Qt.Key_O
-        property int shortcutSkipTaskbar: Qt.Key_1
-        property int shortcutSkipSwitcher: Qt.Key_2
-        property int shortcutSkipPager: Qt.Key_3
+        property int shortcutSkipTaskbar: Qt.Key_Q
+        property int shortcutSkipSwitcher: 0
+        property int shortcutSkipPager: 0
         property int shortcutMaximize: Qt.Key_PageUp
         property int shortcutMaximizeHorizontal: Qt.Key_End
         property int shortcutMaximizeVertical: Qt.Key_Home
         property int shortcutMinimize: Qt.Key_PageDown
         property int shortcutKill: 0
         property int shortcutClose: Qt.Key_Delete
-        property int shortcutDebug: Qt.Key_F12
         // Non-button shortcuts:
         property int shortcutCopyPid: Qt.Key_P
         property int shortcutCopyMenu: Qt.Key_Space
         property int shortcutEdit: Qt.Key_E
-        property int shortcutHtop: Qt.Key_H
         property int shortcutSettings: Qt.Key_F2
         property int shortcutShortcutsPopup: Qt.Key_F1
+
+        // Ten user-defined shell commands, bound to the number keys by default.
+        // The command string is expanded (see tabBox.expandPlaceholders) and run
+        // by the executable data engine; an empty string disables the slot.
+        property int shortcutCustom0: Qt.Key_0
+        property int shortcutCustom1: Qt.Key_1
+        property int shortcutCustom2: Qt.Key_2
+        property int shortcutCustom3: Qt.Key_3
+        property int shortcutCustom4: Qt.Key_4
+        property int shortcutCustom5: Qt.Key_5
+        property int shortcutCustom6: Qt.Key_6
+        property int shortcutCustom7: Qt.Key_7
+        property int shortcutCustom8: Qt.Key_8
+        property int shortcutCustom9: Qt.Key_9
+        property int shortcutCustom10: Qt.Key_F3
+        property int shortcutCustom11: Qt.Key_F4
+        property int shortcutCustom12: Qt.Key_F5
+        property int shortcutCustom13: Qt.Key_F6
+        property int shortcutCustom14: Qt.Key_F7
+        property int shortcutCustom15: Qt.Key_F8
+        property int shortcutCustom16: Qt.Key_F9
+        property int shortcutCustom17: Qt.Key_F10
+        property int shortcutCustom18: Qt.Key_F11
+        property int shortcutCustom19: Qt.Key_F12
+
+        property string customCommand0: ""
+        property string customCommand1: "{{!term}} btop -p 1 -f '!^{{w.pid}}$'"
+        property string customCommand2: ""
+        property string customCommand3: ""
+        property string customCommand4: ""
+        property string customCommand5: ""
+        property string customCommand6: ""
+        property string customCommand7: ""
+        property string customCommand8: ""
+        property string customCommand9: ""
+        property string customCommand10: ""
+        property string customCommand11: ""
+        property string customCommand12: ""
+        property string customCommand13: ""
+        property string customCommand14: ""
+        property string customCommand15: ""
+        property string customCommand16: ""
+        property string customCommand17: ""
+        property string customCommand18: ""
+        property string customCommand19: "echo '{{ dumpProperties(w) }}' > /tmp/kwin_debug_window.txt && kdialog --textbox /tmp/kwin_debug_window.txt --title '{{ \"[TG++ Debug] \" + w.caption }}' --geometry 480x600"
+
+        // Extra names visible to custom-command placeholders, as the body of a
+        // JSON object (the surrounding braces are implied).
+        property string placeholders: '"term": "konsole -e"'
     }
 
     // Defaults for SettingsPanel's "differs from defaults" count and its Restore
@@ -253,22 +300,64 @@ KWin.TabBoxSwitcher {
         shortcutDemandsAttention: Qt.Key_N,
         shortcutShaded: Qt.Key_S,
         shortcutTransparency: Qt.Key_O,
-        shortcutSkipTaskbar: Qt.Key_1,
-        shortcutSkipSwitcher: Qt.Key_2,
-        shortcutSkipPager: Qt.Key_3,
+        shortcutSkipTaskbar: Qt.Key_Q,
+        shortcutSkipSwitcher: 0,
+        shortcutSkipPager: 0,
         shortcutMaximize: Qt.Key_PageUp,
         shortcutMaximizeHorizontal: Qt.Key_End,
         shortcutMaximizeVertical: Qt.Key_Home,
         shortcutMinimize: Qt.Key_PageDown,
         shortcutKill: 0,
         shortcutClose: Qt.Key_Delete,
-        shortcutDebug: Qt.Key_F12,
         shortcutCopyPid: Qt.Key_P,
         shortcutCopyMenu: Qt.Key_Space,
         shortcutEdit: Qt.Key_E,
-        shortcutHtop: Qt.Key_H,
         shortcutSettings: Qt.Key_F2,
         shortcutShortcutsPopup: Qt.Key_F1,
+
+        shortcutCustom0: Qt.Key_0,
+        shortcutCustom1: Qt.Key_1,
+        shortcutCustom2: Qt.Key_2,
+        shortcutCustom3: Qt.Key_3,
+        shortcutCustom4: Qt.Key_4,
+        shortcutCustom5: Qt.Key_5,
+        shortcutCustom6: Qt.Key_6,
+        shortcutCustom7: Qt.Key_7,
+        shortcutCustom8: Qt.Key_8,
+        shortcutCustom9: Qt.Key_9,
+        shortcutCustom10: Qt.Key_F3,
+        shortcutCustom11: Qt.Key_F4,
+        shortcutCustom12: Qt.Key_F5,
+        shortcutCustom13: Qt.Key_F6,
+        shortcutCustom14: Qt.Key_F7,
+        shortcutCustom15: Qt.Key_F8,
+        shortcutCustom16: Qt.Key_F9,
+        shortcutCustom17: Qt.Key_F10,
+        shortcutCustom18: Qt.Key_F11,
+        shortcutCustom19: Qt.Key_F12,
+        
+        customCommand0: "",
+        customCommand1: "{{!term}} btop -p 1 -f '!^{{w.pid}}$'",
+        customCommand2: "",
+        customCommand3: "",
+        customCommand4: "",
+        customCommand5: "",
+        customCommand6: "",
+        customCommand7: "",
+        customCommand8: "",
+        customCommand9: "",
+        customCommand10: "",
+        customCommand11: "",
+        customCommand12: "",
+        customCommand13: "",
+        customCommand14: "",
+        customCommand15: "",
+        customCommand16: "",
+        customCommand17: "",
+        customCommand18: "",
+        customCommand19: "echo '{{ dumpProperties(w) }}' > /tmp/kwin_debug_window.txt && kdialog --textbox /tmp/kwin_debug_window.txt --title '{{ \"[TG++ Debug] \" + w.caption }}' --geometry 480x600",
+
+        placeholders: '"term": "konsole -e"',
     })
 
     // Labels for the mode settings above. Deliberately not declared inside Settings:
@@ -304,6 +393,69 @@ KWin.TabBoxSwitcher {
     readonly property string keyRepeatCommand:
         "kreadconfig6 --file kcminputrc --group Keyboard --key RepeatDelay --default 600;"
         + " kreadconfig6 --file kcminputrc --group Keyboard --key RepeatRate --default 25"
+
+    // --- Custom commands ----------------------------------------------------
+    //
+    // Each of the twenty custom-command slots holds a shell command with
+    // `{{ ... }}` placeholders. The contents of a placeholder are evaluated as
+    // JavaScript with the selected window in scope as `w`, and the result is
+    // substituted into the command:
+    //
+    //   {{ w.pid }}   -> the value, shell-quoted (the safe default: captions
+    //                    and other window-supplied strings are arbitrary text)
+    //   {{! w.pid }}  -> the value verbatim, for when it is meant to be shell
+    //                    syntax rather than a single word
+    //
+    // `dumpProperties()` is in scope too, along with whatever names the
+    // `placeholders` setting defines.
+    // A placeholder that throws expands to nothing.
+
+    // How many custom-command slots there are. The Settings block above has to
+    // declare each one by hand, so this is not free to change.
+    readonly property int customCommandCount: 20
+
+    // Names visible to a placeholder on top of the window's own properties, from
+    // the `placeholders` setting. Re-evaluated when it changes, so an edit takes
+    // effect at once; a half-typed value simply parses as nothing.
+    readonly property var placeholderExtras: {
+        try {
+            return JSON.parse("{" + settings.placeholders.replace(/,\s*$/, "") + "}")
+        } catch (e) {
+            return ({})
+        }
+    }
+
+    function shellQuote(value) {
+        return String(value).replace(/'/g, "'\\''").replace(/"/g, '"\\""')
+    }
+
+    function expandPlaceholders(template, w) {
+        const expanded = String(template).replace(/\{\{(!?)([\s\S]*?)\}\}/g, (match, raw, expr) => {
+            var value
+            try {
+                // The window arrives as a plain argument, so `w.pid` and not
+                // `pid`; only the names from the `placeholders` setting need a
+                // `with`, since they are not known until it is parsed.
+                // dumpProperties is the switcher's own dumper, passed through
+                // with its signature intact: (obj, skipFunctions, indent).
+                value = eval("(function(w, dumpProperties, extra) {"
+                             + " with (extra) { return (" + expr + ") } })")(
+                                 w, tabBox.dumpProperties, tabBox.placeholderExtras)
+            } catch (e) {
+                console.warn("Thumbnail Grid ++: custom command placeholder failed:",
+                             expr, "-", e)
+                return ""
+            }
+            return raw ? String(value) : shellQuote(value)
+        })
+        return expanded
+    }
+
+    function runCustomCommand(index, w) {
+        const command = settings["customCommand" + index]
+        if (!command || !w) return
+        executableSource.connectSource(expandPlaceholders(command, w))
+    }
 
     function applyKeyRepeat(stdout) {
         const lines = String(stdout).trim().split("\n")
@@ -523,6 +675,7 @@ KWin.TabBoxSwitcher {
                     // sit against the right screen edge.
                     parent: wrapper.contentItem
                     cfg: settings
+                    customCommandCount: tabBox.customCommandCount
                     screenW: tabBox.screenGeometry.width
                     screenH: tabBox.screenGeometry.height
                 }
@@ -905,6 +1058,18 @@ KWin.TabBoxSwitcher {
                     executableSource.killPid(closeHoldPid)
                 }
 
+                // Index of the custom-command slot bound to `key`, or -1. Slots with
+                // no shortcut (0) or an empty command never match.
+                function customCommandSlot(key) {
+                    if (!key) return -1
+                    for (var i = 0; i < tabBox.customCommandCount; ++i) {
+                        if (settings["shortcutCustom" + i] === key
+                                && settings["customCommand" + i])
+                            return i
+                    }
+                    return -1
+                }
+
                 function handleSpecialKeys(key) {
                     const idx = tabBox.model.index(tabBox.currentIndex, 0)
                     const window = currentWindow()
@@ -949,23 +1114,12 @@ KWin.TabBoxSwitcher {
                         if (window) copyMenu.show(window, currentDelegatePosition())
                     } else if (key === settings.shortcutEdit) {
                         if (window) editPopup.openFor(window, currentDelegatePosition())
-                    } else if (key === settings.shortcutHtop) {
-                        if (window?.pid) {
-                            // $TERMINAL overrides the terminal configured in KDE
-                            // (kdeglobals [General] TerminalApplication, what KIO's
-                            // KTerminalLauncherJob reads); konsole as last resort.
-                            executableSource.connectSource(
-                                "term=\"${TERMINAL:-$(kreadconfig6 --file kdeglobals"
-                                + " --group General --key TerminalApplication 2>/dev/null)}\";"
-                                + " \"${term:-konsole}\" -e htop -p " + window.pid)
-                        }
                     } else if (key === settings.shortcutSettings) {
                         tabBox.showSettings = !tabBox.showSettings
-                    } else if (key === settings.shortcutDebug) {
-                        var caption = tabBox.model.data(idx, captionRole)
-                        executableSource.showDebugInfo(window, caption)
                     } else if (key === settings.shortcutShortcutsPopup) {
                         shortcutsPopup.toggle()
+                    } else if (customCommandSlot(key) >= 0) {
+                        tabBox.runCustomCommand(customCommandSlot(key), window)
                     } else {
                         return false;
                     }
@@ -1500,8 +1654,12 @@ KWin.TabBoxSwitcher {
                                                     cell: cell
                                                     mode: settings.buttonDebug ? tabBox.buttonModeOnHover : 0
                                                     iconName: "info-symbolic"
-                                                    tooltipUnchecked: "Show window debug info [" + KeyUtils.keyName(settings.shortcutDebug) + "]"
-                                                    onToggled: executableSource.showDebugInfo(window, model.caption)
+                                                    tooltipUnchecked: "Run custom command "
+                                                        + (tabBox.customCommandCount - 1) + " ["
+                                                        + KeyUtils.keyName(settings["shortcutCustom"
+                                                            + (tabBox.customCommandCount - 1)]) + "]"
+                                                    onToggled: tabBox.runCustomCommand(
+                                                        tabBox.customCommandCount - 1, window)
                                                 }
                                             }
 
@@ -1627,6 +1785,7 @@ KWin.TabBoxSwitcher {
 
             cfg: settings
             defaults: tabBox.settingsDefaults
+            customCommandCount: tabBox.customCommandCount
             effectModeModel: tabBox.effectModeModel
             buttonModeModel: tabBox.buttonModeModel
             isPreview: tabBox.isPreview
@@ -1691,6 +1850,7 @@ KWin.TabBoxSwitcher {
 
                 cfg: settings
                 defaults: tabBox.settingsDefaults
+                customCommandCount: tabBox.customCommandCount
                 effectModeModel: tabBox.effectModeModel
                 buttonModeModel: tabBox.buttonModeModel
                 isPreview: tabBox.isPreview
@@ -1735,12 +1895,6 @@ KWin.TabBoxSwitcher {
                 + " setsid sh -c 'sleep " + settings.killGraceSeconds
                 + "; kill -0 " + pid + " 2>/dev/null"
                 + " && kill -KILL " + pid + "' </dev/null >/dev/null 2>&1 &")
-        }
-
-        function showDebugInfo(window, caption) {
-            var text = dumpProperties(window)
-            var cmd = "echo '" + text.replace(/'/g, "'\\''") + "' > /tmp/kwin_debug_window.txt && kdialog --textbox /tmp/kwin_debug_window.txt --title '[TG++ Debug] " + caption + "' --geometry 480x600"
-            executableSource.connectSource(cmd)
         }
     }
 

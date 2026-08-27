@@ -30,6 +30,8 @@ Popup {
     // Property-name -> default value, mirroring Settings' initialisers. Drives
     // the "differs from defaults" count and the Restore defaults button.
     required property var defaults
+    // How many custom-command slots to show; main.qml owns the number.
+    required property int customCommandCount
     // Label lists for the mode matrices, and the switcher's preview flag.
     required property var effectModeModel
     required property var buttonModeModel
@@ -133,6 +135,7 @@ Popup {
         { id: "minimized",  name: "Minimized windows",  glyph: "▁" },
         { id: "buttons",    name: "Window buttons",     glyph: "◧" },
         { id: "shortcuts",  name: "Other shortcuts",    glyph: "⌨" },
+        { id: "custom",     name: "Custom commands",    glyph: "❯" },
         { id: "advanced",   name: "Meta & preview",     glyph: "⚙" }
     ]
 
@@ -158,6 +161,16 @@ Popup {
     function restoreDefaults() {
         for (const key in root.defaults)
             root.cfg[key] = root.defaults[key]
+    }
+
+    // Mirrors main.qml's parse of the same setting, to flag a broken value.
+    readonly property bool placeholdersValid: {
+        try {
+            JSON.parse("{" + root.cfg.placeholders + "}")
+            return true
+        } catch (e) {
+            return false
+        }
     }
 
     // Human-readable rendering of a value for tooltips.
@@ -930,7 +943,9 @@ Popup {
                                     { label: "Maximize vertically", key: "buttonMaximizeVertical", shortcutKey: "shortcutMaximizeVertical" },
                                     { label: "Kill (active = unresponsive)", key: "buttonKill", shortcutKey: "shortcutKill" },
                                     { label: "Close (hold to kill)", key: "buttonClose", boolOnly: true, shortcutKey: "shortcutClose" },
-                                    { label: "Debug", key: "buttonDebug", boolOnly: true, shortcutKey: "shortcutDebug" }
+                                    { label: "Debug", key: "buttonDebug", boolOnly: true,
+                                      help: "Runs the last custom command (see Custom commands below), "
+                                            + "which by default dumps the window's properties into a dialog." }
                                 ]
                                 filter: parent.titleMatch ? "" : root.searchText
                                 visible: shownRows.length > 0
@@ -1010,7 +1025,7 @@ Popup {
                                 HelpLabel {
                                     plain: "Sort keys in debug dump output"
                                     cfgKey: "dumpSortKeys"
-                                    help: "Sort property keys alphabetically in the output of dumpProperties (Debug button). When off, keys appear in their natural enumeration order."
+                                    help: "Sort property keys alphabetically in the output of dumpProperties, the property dumper available to custom commands. When off, keys appear in their natural enumeration order."
                                     onLabelClicked: cbDumpSortKeys.toggle()
                                 }
                             }
@@ -1090,28 +1105,6 @@ Popup {
                             }
 
                             SettingRow {
-                                searchKey: "htop terminal process"
-                                HelpLabel {
-                                    plain: "Open htop"
-                                    cfgKey: "shortcutHtop"
-                                    help: "Open a terminal running htop for the selected window's process."
-                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 11
-                                }
-                                KeyCaptureField {
-                                    id: kcfHtop
-                                    onKeyCaptured: root.cfg.shortcutHtop = keyCode
-                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 4
-                                }
-                                Binding {
-                                    target: kcfHtop
-                                    property: "keyCode"
-                                    value: root.cfg.shortcutHtop
-                                    restoreMode: Binding.RestoreBindingOrValue
-                                }
-                                Item { Layout.fillWidth: true }
-                            }
-
-                            SettingRow {
                                 searchKey: "settings panel configure toggle"
                                 HelpLabel {
                                     plain: "Show/hide settings"
@@ -1153,6 +1146,113 @@ Popup {
                                     restoreMode: Binding.RestoreBindingOrValue
                                 }
                                 Item { Layout.fillWidth: true }
+                            }
+                        }
+
+
+                        // ---- Custom commands -----------------------------------
+                        Section {
+                            id: customSection
+                            cat: "custom"
+                            title: "Custom commands"
+                            description: root.customCommandCount + " user-defined shell commands, run against the selected window. "
+                                         + "Placeholders written as {{ expression }} are evaluated as JavaScript "
+                                         + "with the window in scope as `w`, and substituted shell-quoted; "
+                                         + "{{! expression }} substitutes the value unquoted. "
+                                         + "{{ term }} expands to the terminal command below."
+
+                            readonly property string commandHelp:
+                                "The shell command to run. Text between {{ and }} is evaluated as JavaScript "
+                                + "with the selected window in scope as `w`, and the result is substituted "
+                                + "into the command shell-quoted.\n\n"
+                                + "Examples:\n"
+                                + "  {{ w.pid }}\n"
+                                + "  {{ w.resourceClass }}\n"
+                                + "  {{ w.frameGeometry.width }}\n"
+                                + "  {{ w.minimized ? 'yes' : 'no' }}\n\n"
+                                + "To see which properties a window has, run a command containing "
+                                + "{{ dumpProperties(w) }} - it lists them all with their current values. "
+                                + "That is what the last command (executed by the debug button) does by default.\n\n"
+                                + "Use {{! ... }} to substitute the value verbatim, without quoting, for when it "
+                                + "is meant to be shell syntax rather than a single word.\n\n"
+                                + "Leave empty to disable the slot."
+
+                            SettingRow {
+                                searchKey: "placeholders json variables term terminal"
+                                HelpLabel {
+                                    plain: "Placeholders"
+                                    cfgKey: "placeholders"
+                                    help: "Extra names the commands below can use, as the body of a JSON "
+                                          + "object - the surrounding { } are implied.\n\n"
+                                          + "For example, with\n"
+                                          + "  \"term\": \"konsole\"\n"
+                                          + "a command can say {{ term }} -e htop instead of naming the "
+                                          + "terminal in every slot.\n\n"
+                                          + "They are the only names a placeholder can use without a prefix."
+                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 7
+                                    Layout.alignment: Qt.AlignTop
+                                }
+                                ColumnLayout {
+                                    spacing: Kirigami.Units.smallSpacing
+                                    Layout.fillWidth: true
+
+                                    KwinTextArea {
+                                        text: root.cfg.placeholders
+                                        onTextChanged: root.cfg.placeholders = text
+                                        font.family: "monospace"
+                                        wrapMode: TextEdit.NoWrap
+                                        placeholderText: "\"name\": \"value\", ..."
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: Kirigami.Units.gridUnit * 5
+                                    }
+                                    PlasmaComponents3.Label {
+                                        // The switcher falls back to defining no
+                                        // names at all while this is broken, which
+                                        // is silent otherwise.
+                                        text: "Not valid JSON - no placeholders are defined"
+                                        visible: !root.placeholdersValid
+                                        color: Kirigami.Theme.negativeTextColor
+                                        font.pointSize: Kirigami.Theme.smallFont.pointSize
+                                        Layout.fillWidth: true
+                                    }
+                                }
+                            }
+
+                            // The slots differ only by index, so they are
+                            // generated. Repeater parents its delegates to this
+                            // Section, so they take part in search like any
+                            // hand-written row.
+                            Repeater {
+                                model: root.customCommandCount
+                                delegate: SettingRow {
+                                    required property int index
+                                    searchKey: "custom command " + index + " run shell exec"
+                                    HelpLabel {
+                                        plain: "Command " + index
+                                        cfgKey: "customCommand" + index
+                                        help: customSection.commandHelp
+                                        Layout.preferredWidth: Kirigami.Units.gridUnit * 7
+                                    }
+                                    KeyCaptureField {
+                                        id: kcfCustom
+                                        keyCode: root.cfg["shortcutCustom" + index]
+                                        onKeyCaptured: root.cfg["shortcutCustom" + index] = keyCode
+                                        Layout.preferredWidth: Kirigami.Units.gridUnit * 4
+                                    }
+                                    Binding {
+                                        target: kcfCustom
+                                        property: "keyCode"
+                                        value: root.cfg["shortcutCustom" + index]
+                                        restoreMode: Binding.RestoreBindingOrValue
+                                    }
+                                    KwinTextField {
+                                        text: root.cfg["customCommand" + index]
+                                        onTextEdited: root.cfg["customCommand" + index] = text
+                                        font.family: "monospace"
+                                        placeholderText: "(no command)"
+                                        Layout.fillWidth: true
+                                    }
+                                }
                             }
                         }
 

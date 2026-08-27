@@ -11,7 +11,7 @@ Compared to the stock Thumbnail Grid switcher:
 2. **Hover selection** - show the window just by moving the mouse over it.
 	- Requires system Task Switcher setting to be enabled: Visualization → Show selected window. 
 
-3. **Configurable per-window buttons/indicators** on the thumbnails: close, kill, maximize (full / horizontal / vertical), minimize, fullscreen, hide titlebar, pin to all desktops, keep above/below, hide from screenshots, demand attention, shade, transparency, skip taskbar/switcher/pager, debug info window, X11/Wayland protocol badge.
+3. **Configurable per-window buttons/indicators** on the thumbnails: close, kill, maximize (full / horizontal / vertical), minimize, fullscreen, hide titlebar, pin to all desktops, keep above/below, hide from screenshots, demand attention, shade, transparency, skip taskbar/switcher/pager, debug info window (runs the last custom command), X11/Wayland protocol badge.
 	- **Close/kill** - holding for a configurable grace period escalates to killing the process.
 	- Keyboard shortcuts for all actions (which work even if the button is hidden).
 
@@ -21,7 +21,13 @@ Compared to the stock Thumbnail Grid switcher:
 5. **Window geometry editor (`E`)** - edit x/y/width/height/opacity of the selected window in place.
 	- Stays open when task switcher is closed.
 
-6. **htop on the window's process** (`H`), launched in your configured terminal.
+6. **20 custom commands** (`0`...`9`, `F3`...`F12`) - configurable shell commands run against the selected window.
+	- Placeholders written as `{{ expression }}` are evaluated as JavaScript with the window in scope as `w`, and substituted **shell-quoted**: `{{ w.pid }}`, `{{ w.caption }}`, `{{ w.resourceClass }}`, `{{ w.frameGeometry.width }}`, `{{ w.minimized ? "min" : "vis" }}`.
+	- The **Placeholders** setting defines extra names as the body of a JSON object (the surrounding `{}` are implied), e.g. `"term": "konsole"` lets a command say `{{ term }} -e htop -p {{! w.pid }}`. They are the only names a placeholder can use without a prefix.
+	- `{{! expression }}` substitutes the value **verbatim**, for when it is meant to be shell syntax rather than a single word.
+	- A placeholder whose expression throws expands to nothing; an empty command disables the slot.
+	- To see which properties a window has, use `{{ dumpProperties(w) }}` - it lists them all with their current values. `dumpProperties(obj, skipFunctions, indent)` works on any object.
+	- `1` defaults to `{{!term}} btop -p 1 -f '!^{{!w.pid}}$'`, and `F12` to the window debug info dump - which is also what the per-window **debug info** button runs.
 
 7. **Fixes for ultrawide (e.g. 32:9) screens**
 	- **Configurable thumbnail height** - the stock Thumbnail Grid produces extremely short and wide thumbnails due to setting the thumbnail height based on the screen aspect ratio.

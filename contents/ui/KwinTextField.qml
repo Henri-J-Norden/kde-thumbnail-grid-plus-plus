@@ -5,6 +5,7 @@
 
 import QtQuick
 import QtQuick.Controls
+import "keyutils.js" as KeyUtils
 
 // A TextField that can still be typed into while hosted inside KWin.
 //
@@ -18,8 +19,9 @@ import QtQuick.Controls
 // Settings preview, which is hosted by a normal application window.
 //
 // So when a key arrives without text, reconstruct the character from the key
-// code and insert it by hand. Events that do carry text are left alone, which
-// keeps the normal host (and its input method) working unchanged.
+// code and insert it by hand (KeyUtils.insertKeyEvent). Events that do carry
+// text are left alone, which keeps the normal host (and its input method)
+// working unchanged.
 //
 // Limitations of the fallback path: it assumes a US-ASCII layout, and dead
 // keys, AltGr and input methods are not reachable at all - KWin never gives an
@@ -32,44 +34,9 @@ TextField {
     implicitHeight: fontMetrics.height + 4
     FontMetrics { id: fontMetrics; font: root.font }
 
-    readonly property var shiftedAscii: ({
-        "1": "!", "2": "@", "3": "#", "4": "$", "5": "%",
-        "6": "^", "7": "&", "8": "*", "9": "(", "0": ")",
-        "-": "_", "=": "+", "[": "{", "]": "}", "\\": "|",
-        ";": ":", "'": "\"", ",": "<", ".": ">", "/": "?", "`": "~"
-    })
-
-    // "" when the key carries no printable character of its own (modifiers held,
-    // function keys, navigation keys - all of which TextInput handles by key code).
-    function charForKey(key, modifiers) {
-        if (modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier))
-            return ""
-        // Qt's key codes for printable ASCII are the unshifted character, with
-        // letters as uppercase.
-        if (key < 0x20 || key > 0x7e)
-            return ""
-        const base = String.fromCharCode(key)
-        const isLetter = key >= Qt.Key_A && key <= Qt.Key_Z
-        if (modifiers & Qt.ShiftModifier)
-            return isLetter ? base : (shiftedAscii[base] !== undefined ? shiftedAscii[base] : base)
-        return isLetter ? base.toLowerCase() : base
-    }
-
     Keys.onPressed: (event) => {
-        if (event.text.length > 0)
-            return  // normal host: let TextInput insert it
-        if (readOnly)
+        if (!KeyUtils.insertKeyEvent(root, event, false))
             return
-        const ch = charForKey(event.key, event.modifiers)
-        if (!ch)
-            return
-        if (selectionStart !== selectionEnd)
-            remove(selectionStart, selectionEnd)
-        if (maximumLength >= 0 && length >= maximumLength) {
-            event.accepted = true
-            return
-        }
-        insert(cursorPosition, ch)
         // insert() is a programmatic edit, so TextInput does not emit this for
         // us - but call sites bind through onTextEdited exactly as they would
         // for a normal keystroke.

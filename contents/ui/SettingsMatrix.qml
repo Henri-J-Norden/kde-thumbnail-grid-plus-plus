@@ -20,7 +20,9 @@ ColumnLayout {
     // Column headers: [{ num: "0", label: "Off", tooltip: "..." }, ...]
     required property var modes
     // Rows, in order: { group: "Heading" } for a separator, otherwise
-    // { label, key, boolOnly }. A `boolOnly` row stores a plain bool, so only
+    // { label, key, boolOnly, help }. `help` is optional; a row that has it
+    // gets the same "?" superscript and tooltip as a HelpLabel elsewhere in the
+    // panel. A `boolOnly` row stores a plain bool, so only
     // the "off" column and `boolOnMode` apply to it.
     required property var rows
     // Mode index that a `boolOnly` row's `true` maps to.
@@ -54,6 +56,7 @@ ColumnLayout {
                 continue
             }
             if (r.label.toLowerCase().indexOf(f) >= 0
+                    || (r.help !== undefined && r.help.toLowerCase().indexOf(f) >= 0)
                     || (r.key !== undefined && r.key.toLowerCase().indexOf(f) >= 0)
                     || (r.shortcutKey !== undefined && r.shortcutKey.toLowerCase().indexOf(f) >= 0)) {
                 if (pendingGroup) {
@@ -141,7 +144,11 @@ ColumnLayout {
             spacing: Kirigami.Units.smallSpacing
 
             PlasmaComponents3.Label {
-                text: matrixRow.isGroup ? matrixRow.modelData.group : matrixRow.modelData.label
+                readonly property string help: matrixRow.modelData.help ?? ""
+                textFormat: Text.RichText
+                text: matrixRow.isGroup
+                      ? matrixRow.modelData.group
+                      : matrixRow.modelData.label + (help !== "" ? "<sup>?</sup>" : "")
                 font.bold: matrixRow.isGroup || matrixRow.isChanged
                 font.capitalization: matrixRow.isGroup ? Font.AllUppercase : Font.MixedCase
                 font.pointSize: matrixRow.isGroup ? Kirigami.Theme.smallFont.pointSize
@@ -154,15 +161,15 @@ ColumnLayout {
                 Layout.topMargin: matrixRow.isGroup ? Kirigami.Units.smallSpacing : 0
 
                 ToolTip.text: {
-                    let t = ""
+                    let t = help
                     if (!matrixRow.isGroup && matrixRow.modelData.key !== undefined)
-                        t += "‣ Setting: " + matrixRow.modelData.key
+                        t += (t !== "" ? "\n\n" : "") + "‣ Setting: " + matrixRow.modelData.key
                     if (matrixRow.isChanged)
                         t += (t !== "" ? "\n" : "") + "‣ " + matrixRow.defaultLabel
                     return t
                 }
                 ToolTip.visible: !matrixRow.isGroup
-                    && matrixRow.modelData.key !== undefined
+                    && (matrixRow.modelData.key !== undefined || help !== "")
                     && maRowLabel.containsMouse
                 ToolTip.delay: 0
                 MouseArea {

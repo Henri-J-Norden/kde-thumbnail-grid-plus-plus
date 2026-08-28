@@ -177,7 +177,7 @@ Popup {
     function formatValue(v) {
         if (v === undefined) return ""
         if (typeof v === "boolean") return v ? "on" : "off"
-        return String(v)
+        return String(v).replace(/\n/g, "\\n")
     }
 
     // Human-readable rendering of a default value for tooltips.
@@ -188,10 +188,14 @@ Popup {
     // "key: default → current" per line, for the footer-label hover tooltip.
     readonly property string changedSettingsText: {
         let lines = []
+        let i = 1
         for (const key in root.defaults)
-            if (root.cfg[key] !== root.defaults[key])
-                lines.push(key + ": " + root.formatValue(root.defaults[key])
-                           + " → " + root.formatValue(root.cfg[key]))
+            if (root.cfg[key] !== root.defaults[key]) {
+                const currentVal = root.formatValue(root.cfg[key])
+                const truncated = currentVal.length > 40 ? currentVal.slice(0, 37) + "..." : currentVal
+                lines.push("[" + i++ + "] " + key + ": " + root.formatValue(root.defaults[key])
+                           + " → " + truncated)
+            }
         return lines.join("\n")
     }
 
@@ -1418,9 +1422,12 @@ Popup {
                         elide: Text.ElideRight
                         Layout.fillWidth: true
                         Layout.minimumWidth: 0
-                        ToolTip.text: root.changedSettingsText
-                        ToolTip.visible: root.changedCount > 0 && maFooter.containsMouse
-                        ToolTip.delay: 0
+                        ToolTip {
+                            text: root.changedSettingsText
+                            visible: root.changedCount > 0 && maFooter.containsMouse
+                            delay: 0
+                            width: 600
+                        }
                         MouseArea {
                             id: maFooter
                             anchors.fill: parent

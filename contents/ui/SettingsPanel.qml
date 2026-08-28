@@ -127,13 +127,13 @@ Popup {
     }
 
     readonly property var categories: [
+        { id: "custom",     name: "Custom commands",    glyph: "❯" },
         { id: "grid",       name: "Grid & layout",      glyph: "▦" },
         { id: "thumbnails", name: "Thumbnails",         glyph: "▭" },
         { id: "icons",      name: "Icons & labels",     glyph: "◉" },
         { id: "minimized",  name: "Minimized windows",  glyph: "▁" },
         { id: "buttons",    name: "Window buttons",     glyph: "◧" },
         { id: "shortcuts",  name: "Other shortcuts",    glyph: "⌨" },
-        { id: "custom",     name: "Custom commands",    glyph: "❯" },
         { id: "advanced",   name: "Meta & preview",     glyph: "⚙" }
     ]
 
@@ -497,6 +497,153 @@ Popup {
                         id: settingsColumn
                         width: settingsScroll.width - settingsScroll.ScrollBar.vertical.width - Kirigami.Units.smallSpacing
                         spacing: 0
+
+                        // ---- Custom commands -----------------------------------
+                        Section {
+                            id: customSection
+                            cat: "custom"
+                            title: "Custom commands"
+                            description: "User-defined shell commands (currently: " + root.cfg.commandCount + ")."
+
+                            PlasmaComponents3.Label {
+                                readonly property string url:
+                                    "https://github.com/Henri-J-Norden/kde-thumbnail-grid-plus-plus#custom-commands"
+                                text: "👉 <a href=\"" + url + "\">Placeholder syntax reference, with command examples</a>"
+                                textFormat: Text.StyledText
+                                wrapMode: Text.Wrap
+                                onLinkActivated: link => Qt.openUrlExternally(link)
+                                Layout.bottomMargin: Kirigami.Units.smallSpacing
+                                HoverHandler {
+                                    cursorShape: Qt.PointingHandCursor
+                                }
+                            }
+
+                            SettingRow {
+                                searchKey: "placeholders json variables term terminal add command slot new"
+                                // The label column doubles as somewhere to put an
+                                // add button that is reachable without scrolling
+                                // past every existing slot.
+                                ColumnLayout {
+                                    spacing: Kirigami.Units.smallSpacing
+                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 5
+                                    // The button is wider than the label, and a
+                                    // layout never shrinks below a child's
+                                    // implicit width unless told to - without
+                                    // this the whole column would widen and stop
+                                    // lining up with the rows below.
+                                    Layout.maximumWidth: Kirigami.Units.gridUnit * 5
+                                    Layout.alignment: Qt.AlignTop
+
+                                    HelpLabel {
+                                        plain: "Placeholders"
+                                        cfgKey: "placeholders"
+                                        help: "Extra names the commands below can use, as the body of a JSON "
+                                              + "object - the surrounding { } are implied.\n\n"
+                                              + "For example, with\n"
+                                              + "  \"term\": \"konsole\"\n"
+                                              + "a command can say {{ term }} -e htop instead of naming the "
+                                              + "terminal in every slot.\n\n"
+                                              + "They are the only names a placeholder can use without a prefix."
+                                        Layout.fillWidth: true
+                                    }
+                                    // Sits at the bottom of the label column, so
+                                    // it lines up with the end of the text area.
+                                    Item { Layout.fillHeight: true }
+                                    PlasmaComponents3.Button {
+                                        text: "Add"
+                                        icon.name: "list-add-symbolic"
+                                        ToolTip.text: "Add a command slot at the end"
+                                        ToolTip.visible: hovered
+                                        ToolTip.delay: 0
+                                        onClicked: root.cfg.addCommand()
+                                        Layout.fillWidth: true
+                                        Layout.minimumWidth: 0
+                                    }
+                                }
+                                ColumnLayout {
+                                    spacing: Kirigami.Units.smallSpacing
+                                    Layout.fillWidth: true
+
+                                    KwinTextArea {
+                                        text: root.cfg.placeholders
+                                        onTextChanged: root.cfg.placeholders = text
+                                        font.family: "monospace"
+                                        wrapMode: TextEdit.NoWrap
+                                        placeholderText: "\"name\": \"value\", ..."
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: Kirigami.Units.gridUnit * 5
+                                    }
+                                    PlasmaComponents3.Label {
+                                        // The switcher falls back to defining no
+                                        // names at all while this is broken, which
+                                        // is silent otherwise.
+                                        text: "Not valid JSON - no placeholders are defined"
+                                        visible: !root.placeholdersValid
+                                        color: Kirigami.Theme.negativeTextColor
+                                        font.pointSize: Kirigami.Theme.smallFont.pointSize
+                                        Layout.fillWidth: true
+                                    }
+                                }
+                            }
+
+                            // The slots differ only by index, so they are
+                            // generated. Repeater parents its delegates to this
+                            // Section, so they take part in search like any
+                            // hand-written row.
+                            Repeater {
+                                model: root.cfg.commandCount
+                                delegate: SettingRow {
+                                    required property int index
+                                    searchKey: "custom command " + index + " run shell exec remove delete"
+                                    HelpLabel {
+                                        plain: "Command " + index
+                                        cfgKey: "command" + index
+                                        help: (index === 0 ? "This is the command ran by the Debug window button." : "")
+                                        Layout.preferredWidth: Kirigami.Units.gridUnit * 5
+                                    }
+                                    KeyCaptureField {
+                                        id: kcfCustom
+                                        keyCode: root.cfg.shortcutAt(index)
+                                        onKeyCaptured: root.cfg.setShortcutAt(index, keyCode)
+                                        Layout.preferredWidth: Kirigami.Units.gridUnit * 4
+                                    }
+                                    Binding {
+                                        target: kcfCustom
+                                        property: "keyCode"
+                                        value: root.cfg.shortcutAt(index)
+                                        restoreMode: Binding.RestoreBindingOrValue
+                                    }
+                                    KwinTextField {
+                                        text: root.cfg.commandAt(index)
+                                        onTextEdited: root.cfg.setCommandAt(index, text)
+                                        font.family: "monospace"
+                                        placeholderText: "(no command)"
+                                        Layout.fillWidth: true
+                                    }
+                                    PlasmaComponents3.Button {
+                                        icon.name: "list-remove-symbolic"
+                                        implicitWidth: implicitHeight
+                                        ToolTip.text: "Delete command " + index
+                                        ToolTip.visible: hovered
+                                        ToolTip.delay: 0
+                                        onClicked: root.cfg.removeCommand(index)
+                                    }
+                                }
+                            }
+
+                            SettingRow {
+                                searchKey: "add custom command slot new"
+                                PlasmaComponents3.Button {
+                                    text: "Add"
+                                    icon.name: "list-add-symbolic"
+                                    ToolTip.text: "Add a command slot at the end"
+                                    ToolTip.visible: hovered
+                                    ToolTip.delay: 0
+                                    onClicked: root.cfg.addCommand()
+                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 5
+                                }
+                            }
+                        }
 
                         // ---- Grid & layout -------------------------------
                         Section {
@@ -1148,154 +1295,6 @@ Popup {
                                     restoreMode: Binding.RestoreBindingOrValue
                                 }
                                 Item { Layout.fillWidth: true }
-                            }
-                        }
-
-
-                        // ---- Custom commands -----------------------------------
-                        Section {
-                            id: customSection
-                            cat: "custom"
-                            title: "Custom commands"
-                            description: "User-defined shell commands (currently: " + root.cfg.commandCount + ")."
-
-                            PlasmaComponents3.Label {
-                                readonly property string url:
-                                    "https://github.com/Henri-J-Norden/kde-thumbnail-grid-plus-plus#custom-commands"
-                                text: "👉 <a href=\"" + url + "\">Placeholder syntax reference, with command examples</a>"
-                                textFormat: Text.StyledText
-                                wrapMode: Text.Wrap
-                                onLinkActivated: link => Qt.openUrlExternally(link)
-                                Layout.bottomMargin: Kirigami.Units.smallSpacing
-                                HoverHandler {
-                                    cursorShape: Qt.PointingHandCursor
-                                }
-                            }
-
-                            SettingRow {
-                                searchKey: "placeholders json variables term terminal add command slot new"
-                                // The label column doubles as somewhere to put an
-                                // add button that is reachable without scrolling
-                                // past every existing slot.
-                                ColumnLayout {
-                                    spacing: Kirigami.Units.smallSpacing
-                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 5
-                                    // The button is wider than the label, and a
-                                    // layout never shrinks below a child's
-                                    // implicit width unless told to - without
-                                    // this the whole column would widen and stop
-                                    // lining up with the rows below.
-                                    Layout.maximumWidth: Kirigami.Units.gridUnit * 5
-                                    Layout.alignment: Qt.AlignTop
-
-                                    HelpLabel {
-                                        plain: "Placeholders"
-                                        cfgKey: "placeholders"
-                                        help: "Extra names the commands below can use, as the body of a JSON "
-                                              + "object - the surrounding { } are implied.\n\n"
-                                              + "For example, with\n"
-                                              + "  \"term\": \"konsole\"\n"
-                                              + "a command can say {{ term }} -e htop instead of naming the "
-                                              + "terminal in every slot.\n\n"
-                                              + "They are the only names a placeholder can use without a prefix."
-                                        Layout.fillWidth: true
-                                    }
-                                    // Sits at the bottom of the label column, so
-                                    // it lines up with the end of the text area.
-                                    Item { Layout.fillHeight: true }
-                                    PlasmaComponents3.Button {
-                                        text: "Add"
-                                        icon.name: "list-add-symbolic"
-                                        ToolTip.text: "Add a command slot at the end"
-                                        ToolTip.visible: hovered
-                                        ToolTip.delay: 0
-                                        onClicked: root.cfg.addCommand()
-                                        Layout.fillWidth: true
-                                        Layout.minimumWidth: 0
-                                    }
-                                }
-                                ColumnLayout {
-                                    spacing: Kirigami.Units.smallSpacing
-                                    Layout.fillWidth: true
-
-                                    KwinTextArea {
-                                        text: root.cfg.placeholders
-                                        onTextChanged: root.cfg.placeholders = text
-                                        font.family: "monospace"
-                                        wrapMode: TextEdit.NoWrap
-                                        placeholderText: "\"name\": \"value\", ..."
-                                        Layout.fillWidth: true
-                                        Layout.preferredHeight: Kirigami.Units.gridUnit * 5
-                                    }
-                                    PlasmaComponents3.Label {
-                                        // The switcher falls back to defining no
-                                        // names at all while this is broken, which
-                                        // is silent otherwise.
-                                        text: "Not valid JSON - no placeholders are defined"
-                                        visible: !root.placeholdersValid
-                                        color: Kirigami.Theme.negativeTextColor
-                                        font.pointSize: Kirigami.Theme.smallFont.pointSize
-                                        Layout.fillWidth: true
-                                    }
-                                }
-                            }
-
-                            // The slots differ only by index, so they are
-                            // generated. Repeater parents its delegates to this
-                            // Section, so they take part in search like any
-                            // hand-written row.
-                            Repeater {
-                                model: root.cfg.commandCount
-                                delegate: SettingRow {
-                                    required property int index
-                                    searchKey: "custom command " + index + " run shell exec remove delete"
-                                    HelpLabel {
-                                        plain: "Command " + index
-                                        cfgKey: "command" + index
-                                        help: (index === 0 ? "This is the command ran by the Debug window button." : "")
-                                        Layout.preferredWidth: Kirigami.Units.gridUnit * 5
-                                    }
-                                    KeyCaptureField {
-                                        id: kcfCustom
-                                        keyCode: root.cfg.shortcutAt(index)
-                                        onKeyCaptured: root.cfg.setShortcutAt(index, keyCode)
-                                        Layout.preferredWidth: Kirigami.Units.gridUnit * 4
-                                    }
-                                    Binding {
-                                        target: kcfCustom
-                                        property: "keyCode"
-                                        value: root.cfg.shortcutAt(index)
-                                        restoreMode: Binding.RestoreBindingOrValue
-                                    }
-                                    KwinTextField {
-                                        text: root.cfg.commandAt(index)
-                                        onTextEdited: root.cfg.setCommandAt(index, text)
-                                        font.family: "monospace"
-                                        placeholderText: "(no command)"
-                                        Layout.fillWidth: true
-                                    }
-                                    PlasmaComponents3.Button {
-                                        icon.name: "list-remove-symbolic"
-                                        implicitWidth: implicitHeight
-                                        ToolTip.text: "Delete command " + index
-                                        ToolTip.visible: hovered
-                                        ToolTip.delay: 0
-                                        onClicked: root.cfg.removeCommand(index)
-                                    }
-                                }
-                            }
-
-                            SettingRow {
-                                searchKey: "add custom command slot new"
-                                PlasmaComponents3.Button {
-                                    text: "Add"
-                                    icon.name: "list-add-symbolic"
-                                    ToolTip.text: "Add a command slot at the end"
-                                    ToolTip.visible: hovered
-                                    ToolTip.delay: 0
-                                    onClicked: root.cfg.addCommand()
-                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 5
-                                }
                             }
                         }
 

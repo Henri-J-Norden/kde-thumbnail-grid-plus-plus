@@ -90,10 +90,7 @@ The **Placeholders** setting is a JSON dictionary - excluding the surrounding `{
 
 _These use the example placeholders defined above._
 
-Using `kdialog` to display/debug the result of an expression:
-- `kdialog --msgbox {{' dump(w) }}`
-
-	_Shows all properties of the selected window object - useful for writing commands (`F12` also does this by default)._
+#### Using `kdialog` to display/debug the result of an expression:
 
 - `kdialog --msgbox {{" listOfApps.length + " apps: " + listOfApps.join(", ") }}`
 
@@ -107,7 +104,12 @@ Using `kdialog` to display/debug the result of an expression:
 	- editor: kate
 	```
 
-Using `kdialog` to prompt for input:
+- `echo {{' dump(w) }} > /tmp/tgpp_debug.txt && kdialog --textbox /tmp/tgpp_debug.txt --title {{' "[TG++ message] " + w.caption }} --geometry 480x600`
+
+	_Shows all properties of the selected window object in a textbox (which must be read from file). This is equivalent to `{% showMessage(w.caption, dump(w)) %}`_
+
+#### Using `kdialog` to prompt for input:
+
 - `{% close() %} kdialog --yesno "Log out?" && qdbus6 org.kde.Shutdown /Shutdown logout`
 
 	_Prompts whether to log out._
@@ -124,7 +126,8 @@ Using `kdialog` to prompt for input:
 
 	_Prompts whether to kill the process tree of a window._
 
-Using `{% %}` to modify the selected window inside kwin:
+#### Using `{% %}` to modify the selected window inside kwin:
+
 - `{% w.minimized = !w.minimized %}notify-send {{ w.minimized ? "Minimized" : "Restored" }} {{' w.caption }}`
 
 	_(Un)Minimizes the window from QML, then reports it - the `{% %}` form produces no text of its own._
@@ -134,6 +137,7 @@ Using `{% %}` to modify the selected window inside kwin:
 
 - `sq(str)` / `dq(str)` - functions to escape a string for a single- / double-quoted shell context (bash syntax)
 - `dump(obj, skipFunctions=true)` - a function to dump a JS object's properties as a string
+- `showMessage(message, title, tag="message")` - a shorthand function for `kdialog --textbox`
 - `tabBox` - the root KWin.TabBoxSwitcher object (implemented in C++ as [SwitcherItem](https://invent.kde.org/plasma/kwin/-/blob/master/src/tabbox/switcheritem.h))
 	- _**The `tabBox.` prefix is optional**: for example, `close()` works the same as `tabBox.close()`_
 	- `tabBox.close()` - close the task switcher, without changing the active window
@@ -144,6 +148,10 @@ Using `{% %}` to modify the selected window inside kwin:
 	- `tabBox.allDesktops` - whether the task switcher is shown on all desktops (read-only)
 - `KWin.Workspace` - the global [KWin::WorkspaceWrapper object](https://develop.kde.org/docs/plasma/kwin/api/#kwinworkspacewrapper)
 - `settings` - the object holding all the TG++ task switcher settings
+
+
+## Development
+Install with `kpackagetool6 --type=KWin/WindowSwitcher -i .`
 
 
 ## Limitations

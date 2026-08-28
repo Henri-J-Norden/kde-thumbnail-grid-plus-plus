@@ -186,7 +186,7 @@ KWin.TabBoxSwitcher {
         // says how many slots exist; see commandAt() and friends below.
         property int commandCount: 2
         property int commandShortcut000: Qt.Key_0
-        property string command000: "echo {{' dump(w) }} > /tmp/tgpp_debug.txt && kdialog --textbox /tmp/tgpp_debug.txt --title {{' \"[TG++ Debug] \" + w.caption }} --geometry 480x600 {% close() %}"
+        property string command000: "{% showMessage(dump(w), w.caption) %} {% close() %}"
         property int commandShortcut001: Qt.Key_1
         property string command001: "{{term}} btop -p 1 -f '!^{{w.pid}}$' {% close() %}"
 
@@ -405,7 +405,7 @@ KWin.TabBoxSwitcher {
 
         commandCount: 2,
         commandShortcut000: Qt.Key_0,
-        command000: "echo {{' dump(w) }} > /tmp/tgpp_debug.txt && kdialog --textbox /tmp/tgpp_debug.txt --title {{' \"[TG++ Debug] \" + w.caption }} --geometry 480x600 {% close() %}",
+        command000: "{% showMessage(dump(w), w.caption) %} {% close() %}",
         commandShortcut001: Qt.Key_1,
         command001: "{{term}} btop -p 1 -f '!^{{w.pid}}$' {% close() %}",
 
@@ -645,13 +645,14 @@ KWin.TabBoxSwitcher {
                 continue
             }
 
-            let use_jsonstr = false 
+            let use_jsonstr = _depth >= maxDepth
             let jsonstr = ""
-            if (_depth > 0) {
-                try {
-                    jsonstr = JSON.stringify(v)
-                } catch (e) {
-                    jsonstr = "# [ERROR] " + e
+            
+            try {
+                jsonstr = JSON.stringify(v)
+            } catch (e) {
+                jsonstr = String(v) + " # [ERROR] " + e
+                if (_depth > 0) {
                     use_jsonstr = true
                 }
             }

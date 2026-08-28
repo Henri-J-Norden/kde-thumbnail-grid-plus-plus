@@ -503,7 +503,8 @@ Popup {
                             id: customSection
                             cat: "custom"
                             title: "Custom commands"
-                            description: "User-defined shell commands (currently: " + root.cfg.commandCount + ")."
+                            description: "User-defined shell commands (currently: " + root.cfg.commandCount + "). "
+                                + "\nClick on the command's shortcut (left column) and then press a key on the keyboard to change the shortcut."
 
                             PlasmaComponents3.Label {
                                 readonly property string url:
@@ -523,6 +524,8 @@ Popup {
                                 // The label column doubles as somewhere to put an
                                 // add button that is reachable without scrolling
                                 // past every existing slot.
+                                // Stands in for the command rows' drag handle, so
+                                // the label columns line up.
                                 ColumnLayout {
                                     spacing: Kirigami.Units.smallSpacing
                                     Layout.preferredWidth: Kirigami.Units.gridUnit * 5
@@ -593,13 +596,63 @@ Popup {
                             Repeater {
                                 model: root.cfg.commandCount
                                 delegate: SettingRow {
+                                    id: commandRow
                                     required property int index
-                                    searchKey: "custom command " + index + " run shell exec remove delete"
+                                    searchKey: "custom command " + index + " run shell exec remove delete reorder move drag"
+                                    // Drag handle. A row's position in the layout
+                                    // is fixed, so the drag moves the command
+                                    // itself: once it has travelled a whole row
+                                    // the slot swaps with its neighbour and the
+                                    // travelled distance is banked, so a long drag
+                                    // walks it past several rows.
+                                    Kirigami.Icon {
+                                        source: "handle-sort"
+                                        implicitWidth: Kirigami.Units.iconSizes.small
+                                        implicitHeight: Kirigami.Units.iconSizes.small
+                                        opacity: dragHandle.active ? 1.0 : 0.6
+                                        Layout.preferredWidth: Kirigami.Units.gridUnit
+                                        Layout.alignment: Qt.AlignVCenter
+
+                                        HoverHandler {
+                                            cursorShape: dragHandle.active ? Qt.ClosedHandCursor
+                                                                           : Qt.OpenHandCursor
+                                        }
+                                        DragHandler {
+                                            id: dragHandle
+                                            target: null
+                                            xAxis.enabled: false
+                                            // Where the dragged slot is now, and
+                                            // how much of the drag has been spent
+                                            // moving it.
+                                            property int slot: commandRow.index
+                                            property real banked: 0
+                                            onActiveChanged: {
+                                                slot = commandRow.index
+                                                banked = 0
+                                            }
+                                            onTranslationChanged: {
+                                                const step = commandRow.height
+                                                            + Kirigami.Units.smallSpacing
+                                                if (step <= 0) return
+                                                const last = root.cfg.commandCount - 1
+                                                while (translation.y - banked >= step && slot < last) {
+                                                    root.cfg.moveCommand(slot, slot + 1)
+                                                    ++slot
+                                                    banked += step
+                                                }
+                                                while (translation.y - banked <= -step && slot > 0) {
+                                                    root.cfg.moveCommand(slot, slot - 1)
+                                                    --slot
+                                                    banked -= step
+                                                }
+                                            }
+                                        }
+                                    }
                                     HelpLabel {
                                         plain: "Command " + index
-                                        cfgKey: "command" + index
+                                        cfgKey: root.cfg.commandKey(index)
                                         help: (index === 0 ? "This is the command ran by the Debug window button." : "")
-                                        Layout.preferredWidth: Kirigami.Units.gridUnit * 5
+                                        Layout.preferredWidth: Kirigami.Units.gridUnit * 4
                                     }
                                     KeyCaptureField {
                                         id: kcfCustom

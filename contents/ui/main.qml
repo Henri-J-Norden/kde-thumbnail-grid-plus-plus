@@ -175,7 +175,7 @@ KWin.TabBoxSwitcher {
         property int shortcutShortcutsPopup: Qt.Key_F1
 
         // User-defined shell commands, one per slot: slot i is the command
-        // key `command<i>`, bound to the shortcut key code `commandShortcut<i>`
+        // key `command<NNN>`, bound to the shortcut key code `commandShortcut<NNN>`
         // (0 = no shortcut). The command string is expanded (see
         // tabBox.expandPlaceholders) and run by the executable data engine; an
         // empty string disables the slot.
@@ -185,10 +185,10 @@ KWin.TabBoxSwitcher {
         // read and written with Settings.value()/setValue(). commandCount is what
         // says how many slots exist; see commandAt() and friends below.
         property int commandCount: 2
-        property int commandShortcut0: Qt.Key_0
-        property string command0: "echo {{' dump(w) }} > /tmp/tgpp_debug.txt && kdialog --textbox /tmp/tgpp_debug.txt --title {{' \"[TG++ Debug] \" + w.caption }} --geometry 480x600 {% close() %}"
-        property int commandShortcut1: Qt.Key_1
-        property string command1: "{{term}} btop -p 1 -f '!^{{w.pid}}$' {% close() %}"
+        property int commandShortcut000: Qt.Key_0
+        property string command000: "echo {{' dump(w) }} > /tmp/tgpp_debug.txt && kdialog --textbox /tmp/tgpp_debug.txt --title {{' \"[TG++ Debug] \" + w.caption }} --geometry 480x600 {% close() %}"
+        property int commandShortcut001: Qt.Key_1
+        property string command001: "{{term}} btop -p 1 -f '!^{{w.pid}}$' {% close() %}"
 
         // Extra names visible to custom-command placeholders, as the body of a
         // JSON object (the surrounding braces are implied).
@@ -222,34 +222,46 @@ KWin.TabBoxSwitcher {
         //
         // These live here rather than on tabBox because a slot is nothing but
         // config: everything below is a read or a write of this object.
+        // Slot keys are zero-padded so the config file stays in slot order:
+        // command010 sorts after command009, command10 would not.
+        function commandKey(index) {
+            return "command" + String(index).padStart(3, "0")
+        }
+
+        function commandShortcutKey(index) {
+            return "commandShortcut" + String(index).padStart(3, "0")
+        }
+
         function commandAt(index) {
-            //const rev = _commandsRevision // read for the dependency
-            const declared = settings["command" + index]
-            return declared !== undefined ? declared
-                                          : String(settings.value("command" + index, ""))
+            const rev = _commandsRevision // read for the dependency
+            const key = commandKey(index)
+            const declared = settings[key]
+            return declared !== undefined ? declared : String(settings.value(key, ""))
         }
 
         function shortcutAt(index) {
-            //const rev = _commandsRevision // read for the dependency
-            const declared = settings["commandShortcut" + index]
-            return declared !== undefined ? declared
-                                          : Number(settings.value("commandShortcut" + index, 0)) || 0
+            const rev = _commandsRevision // read for the dependency
+            const key = commandShortcutKey(index)
+            const declared = settings[key]
+            return declared !== undefined ? declared : Number(settings.value(key, 0)) || 0
         }
 
         function setCommandAt(index, text) {
-            if (settings["command" + index] !== undefined)
-                settings["command" + index] = text
+            const key = commandKey(index)
+            if (settings[key] !== undefined)
+                settings[key] = text
             else
-                settings.setValue("command" + index, text)
-            //++_commandsRevision
+                settings.setValue(key, text)
+            ++_commandsRevision
         }
 
         function setShortcutAt(index, keyCode) {
-            if (settings["commandShortcut" + index] !== undefined)
-                settings["commandShortcut" + index] = keyCode
+            const key = commandShortcutKey(index)
+            if (settings[key] !== undefined)
+                settings[key] = keyCode
             else
-                settings.setValue("commandShortcut" + index, keyCode)
-            //++_commandsRevision
+                settings.setValue(key, keyCode)
+            ++_commandsRevision
         }
 
         // The new slot follows on from the last one's key (Key_1 -> Key_2), which
@@ -265,6 +277,26 @@ KWin.TabBoxSwitcher {
             setCommandAt(index, "")
             setShortcutAt(index, next)
             settings.commandCount = index + 1
+        }
+
+        // Moves a slot, command and shortcut together, shifting whatever it
+        // passes over the other way. Reordering is by drag in the settings panel.
+        function moveCommand(from, to) {
+            if (from === to) return
+            const command = commandAt(from)
+            const shortcut = shortcutAt(from)
+            if (from < to)
+                for (var i = from; i < to; ++i) {
+                    setCommandAt(i, commandAt(i + 1))
+                    setShortcutAt(i, shortcutAt(i + 1))
+                }
+            else
+                for (var j = from; j > to; --j) {
+                    setCommandAt(j, commandAt(j - 1))
+                    setShortcutAt(j, shortcutAt(j - 1))
+                }
+            setCommandAt(to, command)
+            setShortcutAt(to, shortcut)
         }
 
         // Slots are identified by position, so removing one shifts the rest down;
@@ -372,10 +404,10 @@ KWin.TabBoxSwitcher {
         shortcutShortcutsPopup: Qt.Key_F1,
 
         commandCount: 2,
-        commandShortcut0: Qt.Key_0,
-        command0: "echo {{' dump(w) }} > /tmp/tgpp_debug.txt && kdialog --textbox /tmp/tgpp_debug.txt --title {{' \"[TG++ Debug] \" + w.caption }} --geometry 480x600 {% close() %}",
-        commandShortcut1: Qt.Key_1,
-        command1: "{{term}} btop -p 1 -f '!^{{w.pid}}$' {% close() %}",
+        commandShortcut000: Qt.Key_0,
+        command000: "echo {{' dump(w) }} > /tmp/tgpp_debug.txt && kdialog --textbox /tmp/tgpp_debug.txt --title {{' \"[TG++ Debug] \" + w.caption }} --geometry 480x600 {% close() %}",
+        commandShortcut001: Qt.Key_1,
+        command001: "{{term}} btop -p 1 -f '!^{{w.pid}}$' {% close() %}",
 
         placeholders: '"term": "konsole -e"',
     })

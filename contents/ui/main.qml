@@ -3,7 +3,6 @@
  This file is part of the KDE project.
 
  SPDX-FileCopyrightText: 2026 Henri J. Norden <55378880+Henri-J-Norden@users.noreply.github.com>
- SPDX-FileCopyrightText: 2024 Antigravity <antigravity@google.com>
  SPDX-License-Identifier: GPL-2.0-or-later
  */
 
@@ -599,7 +598,7 @@ KWin.TabBoxSwitcher {
             checked: tabBox.showSettings
             onCheckedChanged: tabBox.showSettings = checked
             visible: settings.showSettingsButton && tabBox.animationFinished
-            PlasmaComponents3.ToolTip.text: i18n("Settings [" + KeyUtils.keyName(settings.shortcutSettings) + "]")
+            PlasmaComponents3.ToolTip.text: "Settings [" + KeyUtils.keyName(settings.shortcutSettings) + "]"
             PlasmaComponents3.ToolTip.visible: hovered
             PlasmaComponents3.ToolTip.delay: Kirigami.Units.toolTipDelay
         }

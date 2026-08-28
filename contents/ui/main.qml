@@ -532,6 +532,28 @@ KWin.TabBoxSwitcher {
             dialogMainItem.forceActiveFocus()
     }
 
+    // Activate the currently active window through the model.
+    // Essentially a no-op, but there does not seem to be a built-in way to do this?
+    function close() {
+        if (isPreview) {
+            wrapper.close();
+            return;
+        }
+        const active = KWin.Workspace?.activeWindow
+        if (active) {
+            // WIdRole from clientmodel.h (Qt::UserRole + 5)
+            const windowIdRole = Qt.UserRole + 5
+            for (let i = 0; i < model.rowCount(); i++) {
+                if (model.data(model.index(i, 0), windowIdRole) === active.internalId) {
+                    model.activate(i)
+                    return;
+                }
+            }
+        }
+        // Failed to find the window index, activate the first one
+        model.activate(0);
+    }
+
     function dumpProperties(obj, skipFunctions, indent) {
         skipFunctions = skipFunctions || true
         indent = indent || ""
@@ -585,7 +607,7 @@ KWin.TabBoxSwitcher {
 
         MouseArea {
             anchors.fill: parent
-            onClicked: isPreview ? wrapper.close() : tabBox.model.activate(0)
+            onClicked: tabBox.close()
         }
 
         PlasmaComponents3.Button {

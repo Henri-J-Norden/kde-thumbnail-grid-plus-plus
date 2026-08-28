@@ -199,7 +199,7 @@ KWin.TabBoxSwitcher {
         property int shortcutCustom19: Qt.Key_F12
 
         property string customCommand0: ""
-        property string customCommand1: "{{!term}} btop -p 1 -f '!^{{w.pid}}$'"
+        property string customCommand1: "{{term}} btop -p 1 -f '!^{{w.pid}}$' {% close() %}"
         property string customCommand2: ""
         property string customCommand3: ""
         property string customCommand4: ""
@@ -217,7 +217,7 @@ KWin.TabBoxSwitcher {
         property string customCommand16: ""
         property string customCommand17: ""
         property string customCommand18: ""
-        property string customCommand19: "echo '{{ dumpProperties(w) }}' > /tmp/kwin_debug_window.txt && kdialog --textbox /tmp/kwin_debug_window.txt --title '{{ \"[TG++ Debug] \" + w.caption }}' --geometry 480x600"
+        property string customCommand19: "echo {{' dumpProperties(w) }} > /tmp/kwin_debug_window.txt && kdialog --textbox /tmp/kwin_debug_window.txt --title {{' \"[TG++ Debug] \" + w.caption }} --geometry 480x600 {% close() %}"
 
         // Extra names visible to custom-command placeholders, as the body of a
         // JSON object (the surrounding braces are implied).
@@ -336,7 +336,7 @@ KWin.TabBoxSwitcher {
         shortcutCustom19: Qt.Key_F12,
         
         customCommand0: "",
-        customCommand1: "{{!term}} btop -p 1 -f '!^{{w.pid}}$'",
+        customCommand1: "{{term}} btop -p 1 -f '!^{{w.pid}}$' {% close() %}",
         customCommand2: "",
         customCommand3: "",
         customCommand4: "",
@@ -354,7 +354,7 @@ KWin.TabBoxSwitcher {
         customCommand16: "",
         customCommand17: "",
         customCommand18: "",
-        customCommand19: "echo '{{ dumpProperties(w) }}' > /tmp/kwin_debug_window.txt && kdialog --textbox /tmp/kwin_debug_window.txt --title '{{ \"[TG++ Debug] \" + w.caption }}' --geometry 480x600",
+        customCommand19: "echo {{' dumpProperties(w) }} > /tmp/tgpp_debug.txt && kdialog --textbox /tmp/tgpp_debug.txt --title {{' \"[TG++ Debug] \" + w.caption }} --geometry 480x600 {% close() %}",
 
         placeholders: '"term": "konsole -e"',
     })
@@ -393,22 +393,6 @@ KWin.TabBoxSwitcher {
         "kreadconfig6 --file kcminputrc --group Keyboard --key RepeatDelay --default 600;"
         + " kreadconfig6 --file kcminputrc --group Keyboard --key RepeatRate --default 25"
 
-    // --- Custom commands ----------------------------------------------------
-    //
-    // Each of the twenty custom-command slots holds a shell command with
-    // `{{ ... }}` placeholders. The contents of a placeholder are evaluated as
-    // JavaScript with the selected window in scope as `w`, and the result is
-    // substituted into the command:
-    //
-    //   {{ w.pid }}   -> the value, shell-quoted (the safe default: captions
-    //                    and other window-supplied strings are arbitrary text)
-    //   {{! w.pid }}  -> the value verbatim, for when it is meant to be shell
-    //                    syntax rather than a single word
-    //
-    // `dumpProperties()` is in scope too, along with whatever names the
-    // `placeholders` setting defines.
-    // A placeholder that throws expands to nothing.
-
     // How many custom-command slots there are. The Settings block above has to
     // declare each one by hand, so this is not free to change.
     readonly property int customCommandCount: 20
@@ -424,36 +408,79 @@ KWin.TabBoxSwitcher {
         }
     }
 
-    function shellQuote(value) {
-        return String(value).replace(/'/g, "'\\''").replace(/"/g, '"\\""')
+    // Escape single-quotes for bash shell
+    function sq(value) {
+        return String(value).replace(/'/g, "'\\''")
     }
 
+    // Escape double-quotes for bash shell
+    function dq(value) {
+        return String(value).replace(/(["\\$`])/g, "\\$1")
+    }
+
+    // Two placeholder forms, matched in one pass so neither can run into the
+    // other: `{{ ... }}` is an expression and is substituted, `{% ... %}` is a
+    // statement list, run for its side effects and substituted with nothing.
+    // Both are an outer `{ ... }` around an inner `{ ... }` or `% ... %`, which
+    // is what keeps the delimiters from being mixed: `{{ ... %}` and `{% ... }}`
+    // are not matches at all.
     function expandPlaceholders(template, w) {
-        const expanded = String(template).replace(/\{\{(!?)([\s\S]*?)\}\}/g, (match, raw, expr) => {
-            var value
+        const re = /\{(?:\{(['"]?)([\s\S]*?)\}|%([\s\S]*?)%)\}/g
+        const expanded = String(template).replace(re, (match, sigil, expr, stmt) => {
+            const isStatement = stmt !== undefined
+            const body = isStatement ? stmt : expr;
             try {
-                // The window arrives as a plain argument, so `w.pid` and not
-                // `pid`; only the names from the `placeholders` setting need a
-                // `with`, since they are not known until it is parsed.
-                // dumpProperties is the switcher's own dumper, passed through
-                // with its signature intact: (obj, skipFunctions, indent).
-                value = eval("(function(w, dumpProperties, extra) {"
-                             + " with (extra) { return (" + expr + ") } })")(
-                                 w, tabBox.dumpProperties, tabBox.placeholderExtras)
+                var value = eval("(function() { with (placeholderExtras) { return " + body + " } })")()
             } catch (e) {
-                console.warn("Thumbnail Grid ++: custom command placeholder failed:",
-                             expr, "-", e)
+                const placeholder = "{" + (isStatement ? "%" : "{") + sigil + " " + body + " " + (isStatement ? "%" : "}") + "}"
+                //console.warn("Thumbnail Grid ++: failed to evaluate placeholder (in custom command): ", placeholder, " - ", e)
+                //executableSource.connectSource("kdialog --title '[TG++ ERROR]' --error 'Failed to evaluate placeholder (in custom command):\n" + sq(placeholder) + "\n\n" + sq(e) + "'")
+                const error = "Failed to evaluate placeholder (in custom command):\n\t" + e +
+                    "\n\n=== Placeholder ===\n" + placeholder +
+                    "\n\n=== Unexpanded command===\n" + template +
+                    "\n\n=== Traceback ===\n\t" + e + "\n" + e.stack;
+                showError(error, "Cannot expand placeholder in custom command")
                 return ""
             }
-            return raw ? String(value) : shellQuote(value)
+            if (isStatement) return ""
+            if (sigil === "'") return sigil + sq(value) + sigil
+            if (sigil === '"') return sigil + dq(value) + sigil
+            return String(value)
         })
         return expanded
+    }
+
+    function showMessage(message, title, tag) {
+        tag = tag || "message"
+        const path = "/tmp/tgpp_message.txt"
+        const taggedTitle = "[TG++ " + tag + "] " + title
+        const command = `echo '${sq(message)}' > '${path}' && ` +
+            `kdialog --textbox '${path}' --title '${taggedTitle}' --geometry 480x600`
+        executableSource.connectSource(command)
+    }
+
+    function showError(message, title) {
+        showMessage(message, title, "ERROR")
+        tabBox.close()
     }
 
     function runCustomCommand(index, w) {
         const command = settings["customCommand" + index]
         if (!command || !w) return
-        executableSource.connectSource(expandPlaceholders(command, w))
+        let finalCommand = expandPlaceholders(command, w);
+        if (!finalCommand) return
+        
+        // Max command length that works seems to be around 130k, likely MAX_ARG_STRLEN = 32 pages = 131072 bytes
+        const maxLength = 130000;
+        if (finalCommand.length >= maxLength) {
+            const error = "Expanded custom command length " + finalCommand.length + " > " + maxLength + " max!" +
+                "\n\n=== Unexpanded ===\n" + command +
+                "\n\n=== Expanded (first " + maxLength + " chars) ===\n" + finalCommand.slice(0, maxLength)
+            showError(error, "Cannot run custom command")
+            return
+        }
+
+        executableSource.connectSource(finalCommand)
     }
 
     function applyKeyRepeat(stdout) {
@@ -554,30 +581,53 @@ KWin.TabBoxSwitcher {
         model.activate(0);
     }
 
-    function dumpProperties(obj, skipFunctions, indent) {
-        skipFunctions = skipFunctions || true
-        indent = indent || ""
+    function dumpProperties(obj, skipFunctions, maxDepth, _depth) {
         const indentLevel = "    "
-        var keys = Object.keys(obj)
-        if (settings.dumpSortKeys)
-            keys.sort()
-        var lines = []
-        for (var key of keys) {
-            var v = obj[key]
+        skipFunctions = skipFunctions || true
+        maxDepth = maxDepth || 4
+        _depth = _depth || 0
+        const _indent = indentLevel.repeat(_depth)
+
+        if (_depth >= maxDepth) {
+            console.warn("Object too deep, not dumping: " + String(obj));
+            return "";
+        }
+
+        let keys = Object.keys(obj)
+        if (settings.dumpSortKeys) keys.sort()
+        
+        let lines = []
+        if (_depth === 0) lines.push("# " + obj)
+
+        for (let key of keys) {
+            let v = obj[key]
             if (skipFunctions && typeof v === "function") {
                 continue
             }
-            let str = ""
-            if (v !== null && typeof v === "object") {
-                str = dumpProperties(v, skipFunctions, indent + indentLevel)
+
+            let use_jsonstr = false 
+            let jsonstr = ""
+            if (_depth > 0) {
+                try {
+                    jsonstr = JSON.stringify(v)
+                } catch (e) {
+                    jsonstr = "# [ERROR] " + e
+                    use_jsonstr = true
+                }
             }
-            if (str) {
-                lines.push(indent + key + ":")
-                lines.push(indent + indentLevel + "# " + v)
-                lines.push(str)
+
+            let str = ""
+            if (!use_jsonstr && v !== null && typeof v === "object") {
+                str = dumpProperties(v, skipFunctions, maxDepth, _depth + 1)
+            }
+            if (!str) use_jsonstr = true;
+
+            if (use_jsonstr) {
+                lines.push(_indent + key + ": " + jsonstr + (jsonstr === "{}" ? "  # " + v : ""))
             } else {
-                str = JSON.stringify(v)
-                lines.push(indent + key + ": " + str + (str === "{}" ? "  # " + v : ""))
+                lines.push(_indent + key + ":")
+                lines.push(_indent + indentLevel + "# " + v)
+                lines.push(str)
             }
         }
         return lines.join("\n")

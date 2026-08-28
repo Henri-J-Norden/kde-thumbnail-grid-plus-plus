@@ -61,18 +61,21 @@ All shortcuts can be customized from the settings panel, by first clicking on th
 
 When a custom command keyboard shortcut is triggered, the command is run in the default shell after replacing all placeholders in the custom command string.
 
-**Placeholder syntax**: `{{ <expression> }}` and `{{! <expression> }}`
-- `<expression>` is evaluated as [QML JavaScript](https://doc.qt.io/qt-6/qtqml-javascript-functionlist.html), with the following added context:
-  - `w` - the window object
-  - `dumpProperties(obj, skipFunctions=true)` - a function to dump a JS object's properties as a string
-  - Any names defined in the **Placeholders** setting (see below)
-- `{{ <expression> }}` is replaced with the expression result, *shell-quoted* (`"` and `'` are escaped using bash syntax)
-- `{{! <expression> }}` is replaced with the expression result, *verbatim*
-- NB: neither adds quotes *around the result* - you must add them yourself as needed, for example (in bash/fish): `"{{ }}"` allows shell expansion of variables (such as `$HOME`), while `'{{ }}'` prevents shell expansion.
+**Placeholder syntax**: `{{ <expression> }}`, `{{' <expression> }}`, `{{" <expression> }}` and `{% <statements> %}`
+- `<expression>` is evaluated as [QML JavaScript](https://doc.qt.io/qt-6/qtqml-javascript-functionlist.html), with the following environment:
+	- `w` - the window object
+	- Any names defined in the **Placeholders** setting - see [Example placeholders](#example-placeholders)
+	- All QML objects - see [Useful QML objects](#useful-qml-objects)
+- `{{ <expression> }}` is replaced with the expression result *verbatim*
+- `{{' <expression> }}` is replaced with the result in *single-quotes* (shorthand for `'{{ sq(<expression>) }}'`)
+- `{{" <expression> }}` is replaced with the result in *double-quotes* (shorthand for `"{{ dq(<expression>) }}"`)
+- `{% <statements> %}` is replaced with *nothing* - it is run only for its side effects, and may hold several statements: `{% tabBox.close(); w.minimized = true %}`
+- The sigil has to touch the braces. `{{ "x" }}` (with the space) is the expression `"x"`; `{{"x"}}` is the double-quote sigil followed by the broken expression `x"`.
+
+### Example placeholders
 
 The **Placeholders** setting is a JSON dictionary - excluding the surrounding `{}` - that defines additional common constants (dict value), which can be referenced inside the expressions (by using the dict key as a JS name).
 
-### Example placeholders
 ```
 "term": "konsole",
 "listOfApps": ["vlc", "firefox", "kate"],
@@ -84,15 +87,15 @@ The **Placeholders** setting is a JSON dictionary - excluding the surrounding `{
 _These use the example placeholders defined above._
 
 Using `kdialog` to display/debug the result of an expression:
-- `kdialog --msgbox "{{ dumpProperties(w) }}"`
+- `kdialog --msgbox {{' dumpProperties(w) }}`
 
 	_Shows all properties of the selected window object - useful for writing commands (`F12` also does this by default)._
 
-- `kdialog --msgbox "{{ listOfApps.length + " apps: " + listOfApps.join(", ") }}"`
+- `kdialog --msgbox {{" listOfApps.length + " apps: " + listOfApps.join(", ") }}`
 
 	_Shows: `3 apps: vlc, firefox, kate`_
 
-- `kdialog --msgbox "{{ Object.keys(dictOfApps).length + ' apps:\\n' + Object.keys(dictOfApps).map(k => '- ' + k + ': ' + dictOfApps[k]).join('\\n') }}"` _- shows:_
+- `kdialog --msgbox {{" Object.keys(dictOfApps).length + ' apps:\\n' + Object.keys(dictOfApps).map(k => '- ' + k + ': ' + dictOfApps[k]).join('\\n') }}` _- shows:_
 
 	```
 	2 apps:
@@ -101,17 +104,42 @@ Using `kdialog` to display/debug the result of an expression:
 	```
 
 Using `kdialog` to prompt for input:
-- `CMD=$(kdialog --inputbox "Enter a shell command:" "echo {{ w.resourceClass }}"); kdialog --msgbox "$($CMD)"`
+- `{% close() %} kdialog --yesno "Log out?" && qdbus6 org.kde.Shutdown /Shutdown logout`
+
+	_Prompts whether to log out._
+
+- `CMD=$(kdialog --inputbox "Enter a shell command:" "echo {{ dq(w.resourceClass) }}"); kdialog --msgbox "$($CMD)"`
 
 	_Prompts for a shell command to run and shows the output in a second dialog._
 
-- `kdialog --yesno "Freeze {{ w.caption }} (PID {{ w.pid }})?" --yes-label Freeze --no-label Thaw; r=$?; [ $r = 0 ] && kill -STOP {{! w.pid }}; [ $r = 1 ] && kill -CONT {{! w.pid }}`
+- `kdialog --yesno "Freeze {{ dq(w.caption) }} (PID {{ w.pid }})?" --yes-label Freeze --no-label Thaw; r=$?; [ $r = 0 ] && kill -STOP {{ w.pid }}; [ $r = 1 ] && kill -CONT {{ w.pid }}`
 
 	_Freezes/thaws the selected window's process, based on which button is clicked._
 
-- `kdialog --yesno "SIGKILL tree of {{ w.resourceClass }} ({{ w.pid }})?" && kill -9 -{{! w.pid }}`
+- `kdialog --yesno "SIGKILL tree of {{ dq(w.resourceClass) }} ({{ w.pid }})?" && kill -9 -{{ w.pid }}`
 
 	_Prompts whether to kill the process tree of a window._
+
+Using `{% %}` to modify the selected window inside kwin:
+- `{% w.minimized = !w.minimized %}notify-send {{ w.minimized ? "Minimized" : "Restored" }} {{' w.caption }}`
+
+	_(Un)Minimizes the window from QML, then reports it - the statement produces no text of its own._
+
+
+### Useful QML objects
+
+- `sq(str)` / `dq(str)` - functions to escape a string for a single- / double-quoted shell context (bash syntax)
+- `dumpProperties(obj, skipFunctions=true)` - a function to dump a JS object's properties as a string
+- `tabBox` - the root KWin.TabBoxSwitcher object (implemented in C++ as [SwitcherItem](https://invent.kde.org/plasma/kwin/-/blob/master/src/tabbox/switcheritem.h))
+	- _**The `tabBox.` prefix is optional**: for example, `close()` works the same as `tabBox.close()`_
+	- `tabBox.close()` - close the task switcher, without changing the active window
+	- `tabBox.currentIndex` - the index of the currently selected window (read-write)
+	- `tabBox.model.activate(0)` - switch to the first window of the tab switcher and close
+	- `tabBox.model.activate(tabBox.currentIndex)` - switch to the selected window of the tab switcher and close
+	- `tabBox.screenGeometry` - the geometry (Rect) of the screen the task switcher is open on (read-only)
+	- `tabBox.allDesktops` - whether the task switcher is shown on all desktops (read-only)
+- `KWin.Workspace` - the global [KWin::WorkspaceWrapper object](https://develop.kde.org/docs/plasma/kwin/api/#kwinworkspacewrapper)
+- `settings` - the object holding all the TG++ task switcher settings
 
 
 ## Limitations

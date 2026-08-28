@@ -61,7 +61,7 @@ All shortcuts can be customized from the settings panel, by first clicking on th
 
 Custom command slots are added and removed in the settings panel (**Custom commands**), each with its own shortcut key. When a custom command keyboard shortcut is triggered, the command is run in the default shell after replacing all placeholders in the custom command string.
 
-**Placeholder syntax**: `{{ <expression> }}`, `{{' <expression> }}`, `{{" <expression> }}` and `{% <statements> %}`
+**Placeholder syntax**: `{{ <expression> }}`, `{{' <expression> }}`, `{{" <expression> }}` and `{% <expression> %}`
 - `<expression>` is evaluated as [QML JavaScript](https://doc.qt.io/qt-6/qtqml-javascript-functionlist.html), with the following environment:
 	- `w` - the window object
 	- Any names defined in the **Placeholders** setting - see [Example placeholders](#example-placeholders)
@@ -69,8 +69,12 @@ Custom command slots are added and removed in the settings panel (**Custom comma
 - `{{ <expression> }}` is replaced with the expression result *verbatim*
 - `{{' <expression> }}` is replaced with the result in *single-quotes* (shorthand for `'{{ sq(<expression>) }}'`)
 - `{{" <expression> }}` is replaced with the result in *double-quotes* (shorthand for `"{{ dq(<expression>) }}"`)
-- `{% <statements> %}` is replaced with *nothing* - it is run only for its side effects, and may hold several statements: `{% tabBox.close(); w.minimized = true %}`
-- The sigil has to touch the braces. `{{ "x" }}` (with the space) is the expression `"x"`; `{{"x"}}` is the double-quote sigil followed by the broken expression `x"`.
+- `{% <expression> %}` is replaced with *nothing* - it is evaluated only for its side effects: `{% tabBox.close() %}`
+- The sigil has to touch the braces:
+	- `{{" x }}` escapes double-quotes in variable x and wraps the result in double-quotes,
+	- `{{"x"}}` errors: it is the double-quote sigil ("), followed by a broken expression (x"),
+	- `{{ "x"}}` evaluates to the string literal `x`, without any quotes.
+- Every form takes a single *expression*, not a statement list. To run several statements, use an immediately-invoked lambda: `{{ (() => { tabBox.close(); w.minimized = true; return w.caption })() }}`
 
 ### Example placeholders
 
@@ -87,7 +91,7 @@ The **Placeholders** setting is a JSON dictionary - excluding the surrounding `{
 _These use the example placeholders defined above._
 
 Using `kdialog` to display/debug the result of an expression:
-- `kdialog --msgbox {{' dumpProperties(w) }}`
+- `kdialog --msgbox {{' dump(w) }}`
 
 	_Shows all properties of the selected window object - useful for writing commands (`F12` also does this by default)._
 
@@ -123,13 +127,13 @@ Using `kdialog` to prompt for input:
 Using `{% %}` to modify the selected window inside kwin:
 - `{% w.minimized = !w.minimized %}notify-send {{ w.minimized ? "Minimized" : "Restored" }} {{' w.caption }}`
 
-	_(Un)Minimizes the window from QML, then reports it - the statement produces no text of its own._
+	_(Un)Minimizes the window from QML, then reports it - the `{% %}` form produces no text of its own._
 
 
 ### Useful QML objects
 
 - `sq(str)` / `dq(str)` - functions to escape a string for a single- / double-quoted shell context (bash syntax)
-- `dumpProperties(obj, skipFunctions=true)` - a function to dump a JS object's properties as a string
+- `dump(obj, skipFunctions=true)` - a function to dump a JS object's properties as a string
 - `tabBox` - the root KWin.TabBoxSwitcher object (implemented in C++ as [SwitcherItem](https://invent.kde.org/plasma/kwin/-/blob/master/src/tabbox/switcheritem.h))
 	- _**The `tabBox.` prefix is optional**: for example, `close()` works the same as `tabBox.close()`_
 	- `tabBox.close()` - close the task switcher, without changing the active window

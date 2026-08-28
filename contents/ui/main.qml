@@ -186,7 +186,7 @@ KWin.TabBoxSwitcher {
         // says how many slots exist; see commandAt() and friends below.
         property int commandCount: 2
         property int commandShortcut0: Qt.Key_0
-        property string command0: "echo {{' dumpProperties(w) }} > /tmp/tgpp_debug.txt && kdialog --textbox /tmp/tgpp_debug.txt --title {{' \"[TG++ Debug] \" + w.caption }} --geometry 480x600 {% close() %}"
+        property string command0: "echo {{' dump(w) }} > /tmp/tgpp_debug.txt && kdialog --textbox /tmp/tgpp_debug.txt --title {{' \"[TG++ Debug] \" + w.caption }} --geometry 480x600 {% close() %}"
         property int commandShortcut1: Qt.Key_1
         property string command1: "{{term}} btop -p 1 -f '!^{{w.pid}}$' {% close() %}"
 
@@ -373,7 +373,7 @@ KWin.TabBoxSwitcher {
 
         commandCount: 2,
         commandShortcut0: Qt.Key_0,
-        command0: "echo {{' dumpProperties(w) }} > /tmp/tgpp_debug.txt && kdialog --textbox /tmp/tgpp_debug.txt --title {{' \"[TG++ Debug] \" + w.caption }} --geometry 480x600 {% close() %}",
+        command0: "echo {{' dump(w) }} > /tmp/tgpp_debug.txt && kdialog --textbox /tmp/tgpp_debug.txt --title {{' \"[TG++ Debug] \" + w.caption }} --geometry 480x600 {% close() %}",
         commandShortcut1: Qt.Key_1,
         command1: "{{term}} btop -p 1 -f '!^{{w.pid}}$' {% close() %}",
 
@@ -426,8 +426,9 @@ KWin.TabBoxSwitcher {
     }
 
     // Two placeholder forms, matched in one pass so neither can run into the
-    // other: `{{ ... }}` is an expression and is substituted, `{% ... %}` is a
-    // statement list, run for its side effects and substituted with nothing.
+    // other: both hold a single expression, `{{ ... }}` substituting its value
+    // and `{% ... %}` substituting nothing - the latter is for side effects, and
+    // several statements go in an immediately-invoked lambda.
     // Both are an outer `{ ... }` around an inner `{ ... }` or `% ... %`, which
     // is what keeps the delimiters from being mixed: `{{ ... %}` and `{% ... }}`
     // are not matches at all.
@@ -588,7 +589,7 @@ KWin.TabBoxSwitcher {
         model.activate(0);
     }
 
-    function dumpProperties(obj, skipFunctions, maxDepth, _depth) {
+    function dump(obj, skipFunctions, maxDepth, _depth) {
         const indentLevel = "    "
         skipFunctions = skipFunctions || true
         maxDepth = maxDepth || 4
@@ -625,7 +626,7 @@ KWin.TabBoxSwitcher {
 
             let str = ""
             if (!use_jsonstr && v !== null && typeof v === "object") {
-                str = dumpProperties(v, skipFunctions, maxDepth, _depth + 1)
+                str = dump(v, skipFunctions, maxDepth, _depth + 1)
             }
             if (!str) use_jsonstr = true;
 

@@ -1027,7 +1027,7 @@ Popup {
                                 HelpLabel {
                                     plain: "Sort keys in debug dump output"
                                     cfgKey: "dumpSortKeys"
-                                    help: "Sort property keys alphabetically in the output of dumpProperties, the property dumper available to custom commands. When off, keys appear in their natural enumeration order."
+                                    help: "Sort property keys alphabetically in the output of dump, the property dumper available to custom commands. When off, keys appear in their natural enumeration order."
                                     onLabelClicked: cbDumpSortKeys.toggle()
                                 }
                             }
@@ -1157,31 +1157,20 @@ Popup {
                             id: customSection
                             cat: "custom"
                             title: "Custom commands"
-                            description: "User-defined shell commands. "
-                                + "Text between {{ and }} is evaluated as JavaScript "
-                                + "with the selected window in scope as `w`, and the result is substituted "
-                                + "into the command verbatim.\n\n"
-                                + "Examples:\n"
-                                + "  {{ w.pid }}\n"
-                                + "  {{ w.resourceClass }}\n"
-                                + "  {{ w.frameGeometry.width }}\n"
-                                + "  {{ w.minimized ? \'yes\' : \'no\' }}\n\n"
-                                + "A sigil right after the opening braces quotes the result, which is what "
-                                + "anything that can contain spaces needs:\n"
-                                + "  {{\' expression }} substitutes it in single quotes\n"
-                                + "  {{\" expression }} substitutes it in double quotes\n"
-                                + "The sigil has to touch the braces: {{\" x }} quotes x, {{\"x\"}} is the "
-                                + "sigil followed by the broken expression x\", and {{ \"x\"}} evaluates to the string literal \"x\".\n\n"
-                                + "{% statements %} substitutes nothing and is run only for its side effects, "
-                                + "and may hold several statements:\n"
-                                + "  {% tabBox.close(); w.minimized = true %}\n\n"
-                                + "To see which properties a window has, run a command containing "
-                                + "{% showMessage(dumpProperties(w)) %} - it lists them all with their current values. "
-                                + "That is what the first command (executed by the debug button) does by default.\n\n"
-                                + "Leave empty to disable the slot."
+                            description: "User-defined shell commands (currently: " + root.cfg.commandCount + ")."
 
-                            readonly property string commandHelp: ""
-
+                            PlasmaComponents3.Label {
+                                readonly property string url:
+                                    "https://github.com/Henri-J-Norden/kde-thumbnail-grid-plus-plus#custom-commands"
+                                text: "👉 <a href=\"" + url + "\">Placeholder syntax reference, with command examples</a>"
+                                textFormat: Text.StyledText
+                                wrapMode: Text.Wrap
+                                onLinkActivated: link => Qt.openUrlExternally(link)
+                                Layout.bottomMargin: Kirigami.Units.smallSpacing
+                                HoverHandler {
+                                    cursorShape: Qt.PointingHandCursor
+                                }
+                            }
 
                             SettingRow {
                                 searchKey: "placeholders json variables term terminal add command slot new"
@@ -1263,7 +1252,7 @@ Popup {
                                     HelpLabel {
                                         plain: "Command " + index
                                         cfgKey: "command" + index
-                                        help: customSection.commandHelp
+                                        help: (index === 0 ? "This is the command ran by the Debug window button." : "")
                                         Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                                     }
                                     KeyCaptureField {

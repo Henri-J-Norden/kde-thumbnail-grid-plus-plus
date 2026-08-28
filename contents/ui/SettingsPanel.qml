@@ -650,7 +650,7 @@ Popup {
                                     }
                                     HelpLabel {
                                         plain: "Command " + index
-                                        cfgKey: root.cfg.commandKey(index)
+                                        cfgKey: root.cfg.commandShortcutKey(index) + ", " + root.cfg.commandKey(index)
                                         help: (index === 0 ? "This is the command ran by the Debug window button." : "")
                                         Layout.preferredWidth: Kirigami.Units.gridUnit * 4
                                     }

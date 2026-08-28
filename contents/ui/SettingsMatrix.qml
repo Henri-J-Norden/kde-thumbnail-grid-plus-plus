@@ -162,8 +162,12 @@ ColumnLayout {
 
                 ToolTip.text: {
                     let t = help
-                    if (!matrixRow.isGroup && matrixRow.modelData.key !== undefined)
+                    if (!matrixRow.isGroup && matrixRow.modelData.key !== undefined) {
                         t += (t !== "" ? "\n\n" : "") + "‣ Setting: " + matrixRow.modelData.key
+                        if (matrixRow.modelData.shortcutKey)
+                            t += ", " + matrixRow.modelData.shortcutKey
+                    }
+
                     if (matrixRow.isChanged)
                         t += (t !== "" ? "\n" : "") + "‣ " + matrixRow.defaultLabel
                     return t

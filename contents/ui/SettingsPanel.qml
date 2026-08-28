@@ -30,8 +30,6 @@ Popup {
     // Property-name -> default value, mirroring Settings' initialisers. Drives
     // the "differs from defaults" count and the Restore defaults button.
     required property var defaults
-    // How many custom-command slots to show; main.qml owns the number.
-    required property int customCommandCount
     // Label lists for the mode matrices, and the switcher's preview flag.
     required property var effectModeModel
     required property var buttonModeModel
@@ -948,7 +946,7 @@ Popup {
                                     { label: "Kill (active = unresponsive)", key: "buttonKill", shortcutKey: "shortcutKill" },
                                     { label: "Close (hold to kill)", key: "buttonClose", boolOnly: true, shortcutKey: "shortcutClose" },
                                     { label: "Debug", key: "buttonDebug", boolOnly: true,
-                                      help: "Runs the last custom command (see Custom commands below), "
+                                      help: "Runs the first custom command (see Custom commands below), "
                                             + "which by default dumps the window's properties into a dialog." }
                                 ]
                                 filter: parent.titleMatch ? "" : root.searchText
@@ -1159,42 +1157,73 @@ Popup {
                             id: customSection
                             cat: "custom"
                             title: "Custom commands"
-                            description: root.customCommandCount + " user-defined shell commands, run against the selected window. "
-                                         + "Placeholders written as {{ expression }} are evaluated as JavaScript "
-                                         + "with the window in scope as `w`, and substituted shell-quoted; "
-                                         + "{{! expression }} substitutes the value unquoted. "
-                                         + "{{ term }} expands to the terminal command below."
-
-                            readonly property string commandHelp:
-                                "The shell command to run. Text between {{ and }} is evaluated as JavaScript "
+                            description: "User-defined shell commands. "
+                                + "Text between {{ and }} is evaluated as JavaScript "
                                 + "with the selected window in scope as `w`, and the result is substituted "
-                                + "into the command shell-quoted.\n\n"
+                                + "into the command verbatim.\n\n"
                                 + "Examples:\n"
                                 + "  {{ w.pid }}\n"
                                 + "  {{ w.resourceClass }}\n"
                                 + "  {{ w.frameGeometry.width }}\n"
-                                + "  {{ w.minimized ? 'yes' : 'no' }}\n\n"
+                                + "  {{ w.minimized ? \'yes\' : \'no\' }}\n\n"
+                                + "A sigil right after the opening braces quotes the result, which is what "
+                                + "anything that can contain spaces needs:\n"
+                                + "  {{\' expression }} substitutes it in single quotes\n"
+                                + "  {{\" expression }} substitutes it in double quotes\n"
+                                + "The sigil has to touch the braces: {{\" x }} quotes x, {{\"x\"}} is the "
+                                + "sigil followed by the broken expression x\", and {{ \"x\"}} evaluates to the string literal \"x\".\n\n"
+                                + "{% statements %} substitutes nothing and is run only for its side effects, "
+                                + "and may hold several statements:\n"
+                                + "  {% tabBox.close(); w.minimized = true %}\n\n"
                                 + "To see which properties a window has, run a command containing "
-                                + "{{ dumpProperties(w) }} - it lists them all with their current values. "
-                                + "That is what the last command (executed by the debug button) does by default.\n\n"
-                                + "Use {{! ... }} to substitute the value verbatim, without quoting, for when it "
-                                + "is meant to be shell syntax rather than a single word.\n\n"
+                                + "{% showMessage(dumpProperties(w)) %} - it lists them all with their current values. "
+                                + "That is what the first command (executed by the debug button) does by default.\n\n"
                                 + "Leave empty to disable the slot."
 
+                            readonly property string commandHelp: ""
+
+
                             SettingRow {
-                                searchKey: "placeholders json variables term terminal"
-                                HelpLabel {
-                                    plain: "Placeholders"
-                                    cfgKey: "placeholders"
-                                    help: "Extra names the commands below can use, as the body of a JSON "
-                                          + "object - the surrounding { } are implied.\n\n"
-                                          + "For example, with\n"
-                                          + "  \"term\": \"konsole\"\n"
-                                          + "a command can say {{ term }} -e htop instead of naming the "
-                                          + "terminal in every slot.\n\n"
-                                          + "They are the only names a placeholder can use without a prefix."
-                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 7
+                                searchKey: "placeholders json variables term terminal add command slot new"
+                                // The label column doubles as somewhere to put an
+                                // add button that is reachable without scrolling
+                                // past every existing slot.
+                                ColumnLayout {
+                                    spacing: Kirigami.Units.smallSpacing
+                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 5
+                                    // The button is wider than the label, and a
+                                    // layout never shrinks below a child's
+                                    // implicit width unless told to - without
+                                    // this the whole column would widen and stop
+                                    // lining up with the rows below.
+                                    Layout.maximumWidth: Kirigami.Units.gridUnit * 5
                                     Layout.alignment: Qt.AlignTop
+
+                                    HelpLabel {
+                                        plain: "Placeholders"
+                                        cfgKey: "placeholders"
+                                        help: "Extra names the commands below can use, as the body of a JSON "
+                                              + "object - the surrounding { } are implied.\n\n"
+                                              + "For example, with\n"
+                                              + "  \"term\": \"konsole\"\n"
+                                              + "a command can say {{ term }} -e htop instead of naming the "
+                                              + "terminal in every slot.\n\n"
+                                              + "They are the only names a placeholder can use without a prefix."
+                                        Layout.fillWidth: true
+                                    }
+                                    // Sits at the bottom of the label column, so
+                                    // it lines up with the end of the text area.
+                                    Item { Layout.fillHeight: true }
+                                    PlasmaComponents3.Button {
+                                        text: "Add"
+                                        icon.name: "list-add-symbolic"
+                                        ToolTip.text: "Add a command slot at the end"
+                                        ToolTip.visible: hovered
+                                        ToolTip.delay: 0
+                                        onClicked: root.cfg.addCommand()
+                                        Layout.fillWidth: true
+                                        Layout.minimumWidth: 0
+                                    }
                                 }
                                 ColumnLayout {
                                     spacing: Kirigami.Units.smallSpacing
@@ -1227,35 +1256,56 @@ Popup {
                             // Section, so they take part in search like any
                             // hand-written row.
                             Repeater {
-                                model: root.customCommandCount
+                                model: root.cfg.commandCount
                                 delegate: SettingRow {
                                     required property int index
-                                    searchKey: "custom command " + index + " run shell exec"
+                                    searchKey: "custom command " + index + " run shell exec remove delete"
                                     HelpLabel {
                                         plain: "Command " + index
-                                        cfgKey: "customCommand" + index
+                                        cfgKey: "command" + index
                                         help: customSection.commandHelp
-                                        Layout.preferredWidth: Kirigami.Units.gridUnit * 7
+                                        Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                                     }
                                     KeyCaptureField {
                                         id: kcfCustom
-                                        keyCode: root.cfg["shortcutCustom" + index]
-                                        onKeyCaptured: root.cfg["shortcutCustom" + index] = keyCode
+                                        keyCode: root.cfg.shortcutAt(index)
+                                        onKeyCaptured: root.cfg.setShortcutAt(index, keyCode)
                                         Layout.preferredWidth: Kirigami.Units.gridUnit * 4
                                     }
                                     Binding {
                                         target: kcfCustom
                                         property: "keyCode"
-                                        value: root.cfg["shortcutCustom" + index]
+                                        value: root.cfg.shortcutAt(index)
                                         restoreMode: Binding.RestoreBindingOrValue
                                     }
                                     KwinTextField {
-                                        text: root.cfg["customCommand" + index]
-                                        onTextEdited: root.cfg["customCommand" + index] = text
+                                        text: root.cfg.commandAt(index)
+                                        onTextEdited: root.cfg.setCommandAt(index, text)
                                         font.family: "monospace"
                                         placeholderText: "(no command)"
                                         Layout.fillWidth: true
                                     }
+                                    PlasmaComponents3.Button {
+                                        icon.name: "list-remove-symbolic"
+                                        implicitWidth: implicitHeight
+                                        ToolTip.text: "Delete command " + index
+                                        ToolTip.visible: hovered
+                                        ToolTip.delay: 0
+                                        onClicked: root.cfg.removeCommand(index)
+                                    }
+                                }
+                            }
+
+                            SettingRow {
+                                searchKey: "add custom command slot new"
+                                PlasmaComponents3.Button {
+                                    text: "Add"
+                                    icon.name: "list-add-symbolic"
+                                    ToolTip.text: "Add a command slot at the end"
+                                    ToolTip.visible: hovered
+                                    ToolTip.delay: 0
+                                    onClicked: root.cfg.addCommand()
+                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                                 }
                             }
                         }

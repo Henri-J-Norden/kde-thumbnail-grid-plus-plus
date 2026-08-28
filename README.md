@@ -21,10 +21,10 @@ Compared to the stock Thumbnail Grid switcher:
 5. **Window geometry editor (`E`)** - edit x/y/width/height/opacity of the selected window in place.
 	- Stays open when task switcher is closed.
 
-6. **[20 custom commands](#custom-commands)** (`0`...`9`, `F3`...`F12`) - configurable shell commands (with placeholders for window properties) that run against the selected window.
+6. **[Custom commands](#custom-commands)** - any number of configurable shell commands with placeholders for accessing window properties, triggered by keyboard shortcuts.
 	- By default:
+		- `0` shows a dump of all window properties
 		- `1` shows the window's process tree in btop
-		- `F12` shows a dump of all window properties
 
 7. **Fixes for ultrawide (e.g. 32:9) screens**
 	- **Configurable thumbnail height** - the stock Thumbnail Grid produces extremely short and wide thumbnails due to setting the thumbnail height based on the screen aspect ratio.
@@ -59,7 +59,7 @@ All shortcuts can be customized from the settings panel, by first clicking on th
 
 ## Custom commands
 
-When a custom command keyboard shortcut is triggered, the command is run in the default shell after replacing all placeholders in the custom command string.
+Custom command slots are added and removed in the settings panel (**Custom commands**), each with its own shortcut key. When a custom command keyboard shortcut is triggered, the command is run in the default shell after replacing all placeholders in the custom command string.
 
 **Placeholder syntax**: `{{ <expression> }}`, `{{' <expression> }}`, `{{" <expression> }}` and `{% <statements> %}`
 - `<expression>` is evaluated as [QML JavaScript](https://doc.qt.io/qt-6/qtqml-javascript-functionlist.html), with the following environment:

@@ -13,7 +13,6 @@ import "keyutils.js" as KeyUtils
 Popup {
     id: root
     required property var cfg
-    required property int customCommandCount
     property int screenW: 1920
     property int screenH: 1080
 
@@ -74,9 +73,9 @@ Popup {
     // their own, so the command string itself is the label.
     readonly property var customShortcuts: {
         var out = []
-        for (var i = 0; i < root.customCommandCount; ++i) {
-            if (root.cfg["customCommand" + i])
-                out.push({ label: root.cfg["customCommand" + i], key: "shortcutCustom" + i })
+        for (var i = 0; i < root.cfg.commandCount; ++i) {
+            if (root.cfg.commandAt(i))
+                out.push({ label: root.cfg.commandAt(i), code: root.cfg.shortcutAt(i) })
         }
         return out
     }
@@ -181,7 +180,7 @@ Popup {
                         Layout.fillWidth: true
                         spacing: Kirigami.Units.smallSpacing
                         readonly property string keyText: KeyUtils.keyName(root.cfg[modelData.key])
-                        readonly property bool disabled: root.cfg[modelData.key] === 0
+                        readonly property bool disabled: !root.cfg[modelData.key]
                         PlasmaComponents3.Label {
                             text: keyText
                             font.family: "monospace"
@@ -225,7 +224,7 @@ Popup {
                         Layout.fillWidth: true
                         spacing: Kirigami.Units.smallSpacing
                         readonly property string keyText: KeyUtils.keyName(root.cfg[modelData.key])
-                        readonly property bool disabled: root.cfg[modelData.key] === 0
+                        readonly property bool disabled: !root.cfg[modelData.key]
                         PlasmaComponents3.Label {
                             text: keyText
                             font.family: "monospace"
@@ -272,8 +271,8 @@ Popup {
                     delegate: RowLayout {
                         Layout.fillWidth: true
                         spacing: Kirigami.Units.smallSpacing
-                        readonly property string keyText: KeyUtils.keyName(root.cfg[modelData.key])
-                        readonly property bool disabled: root.cfg[modelData.key] === 0
+                        readonly property string keyText: KeyUtils.keyName(modelData.code)
+                        readonly property bool disabled: !modelData.code
                         PlasmaComponents3.Label {
                             text: keyText
                             font.family: "monospace"

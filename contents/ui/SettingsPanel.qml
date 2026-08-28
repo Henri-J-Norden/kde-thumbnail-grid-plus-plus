@@ -889,6 +889,22 @@ Popup {
                                     onLabelClicked: cbLockGridYPosition.toggle()
                                 }
                             }
+
+                            SettingRow {
+                                searchKey: "select first window on open initial index"
+                                PlasmaComponents3.CheckBox {
+                                    id: cbSelectFirstOnOpen
+                                    checked: root.cfg.selectFirstOnOpen
+                                    onCheckedChanged: root.cfg.selectFirstOnOpen = checked
+                                }
+                                HelpLabel {
+                                    plain: "Select first window on open"
+                                    cfgKey: "selectFirstOnOpen"
+                                    help: "Highlight the first window in the grid when the task switcher opens, instead of the next window in the switching order that KWin preselects."
+                                        + "\n\nYou will probably want to disable Delay from System Settings -> Task Switcher, otherwise the active window will be switched, if you release the key combo too fast."
+                                    onLabelClicked: cbSelectFirstOnOpen.toggle()
+                                }
+                            }
                         }
 
                         // ---- Thumbnails ----------------------------------

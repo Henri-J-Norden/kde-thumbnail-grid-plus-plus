@@ -90,6 +90,7 @@ KWin.TabBoxSwitcher {
         property bool lockGridWidth: true
         property bool lockGridYPosition: true
         property bool centerHighlightButtons: true
+        property bool selectFirstOnOpen: false
 
         property int thumbnailWidthGridUnits: 16
         property string thumbnailHeightInput: "16:10"
@@ -326,6 +327,7 @@ KWin.TabBoxSwitcher {
         lockGridWidth: true,
         lockGridYPosition: true,
         centerHighlightButtons: true,
+        selectFirstOnOpen: false,
 
         thumbnailWidthGridUnits: 16,
         thumbnailHeightInput: "16:10",
@@ -687,6 +689,10 @@ KWin.TabBoxSwitcher {
                 Qt.callLater(() => dialogMainItem.lockedColumns = dialogMainItem.columns)
             if (visible && settings.lockGridYPosition)
                 Qt.callLater(() => dialogMainItem.lockedY = wnd.y)
+            // KWin preselects the next window; snap back to the first entry
+            // once it has done so.
+            if (visible && settings.selectFirstOnOpen)
+                Qt.callLater(() => tabBox.currentIndex = 0)
             // The settings panel follows the switcher between its two hosts.
             tabBox.updateSettingsHost()
             if (visible)

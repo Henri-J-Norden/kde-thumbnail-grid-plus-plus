@@ -21,7 +21,7 @@ Compared to the stock Thumbnail Grid switcher:
 5. **Window geometry editor (`E`)** - edit x/y/width/height/opacity of the selected window in place.
 	- Stays open when task switcher is closed.
 
-6. **[Custom commands](#custom-commands)** - any number of configurable shell commands with placeholders for accessing window properties, triggered by keyboard shortcuts.
+6. **[Custom commands](#custom-commands)** - any number of configurable shell commands with placeholders for accessing window properties and JavaScript (Qt QML) scripting, triggered by keyboard shortcuts.
 	- By default:
 		- `0` shows a dump of all window properties
 		- `1` shows the window's process tree in btop

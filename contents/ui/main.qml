@@ -760,12 +760,23 @@ KWin.TabBoxSwitcher {
                     hoverThresholdMet = false
                 }
 
+                // Same as rearmHoverSelection, but even when minDelta == 0
+                function disarmHoverSelection() {
+                    hoverArmPositionSet = false
+                    hoverThresholdMet = false
+                    hoverLastScenePositionSet = false
+                }
+
                 Clipboard { id: clipboard }
 
                 CopyMenu {
                     id: copyMenu
                     isX11Window: tabBox.isX11Window
-                    onCopyRequested: text => clipboard.content = text
+                    onCopyRequested: text => {
+                        clipboard.content = text
+                        copyMenu.sticky = false
+                        dialogMainItem.disarmHoverSelection()
+                    }
                     onNavigateRequested: key => dialogMainItem.navigate(key)
                     onCommandRequested: command => executableSource.connectSource(command)
                 }

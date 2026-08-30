@@ -27,13 +27,16 @@ Popup {
     // The shared RepaintTrick from main.qml; moving anything from inside KWin
     // needs a full-screen repaint or it leaves stale frames behind.
     property var repaintTrick: null
+    // Set while this popup is the one writing frameGeometry, so the window's
+    // own change signal does not echo back into the fields mid-write.
+    property bool _writing: false
     modal: false
     focus: root.windowHosted
     // Matches SettingsPanel: a click on the switcher behind should not throw
     // away an edit in progress. Escape, [E] and Cancel still dismiss it.
     closePolicy: Popup.NoAutoClose
     padding: 0
-    width: Kirigami.Units.gridUnit * 32
+    width: Kirigami.Units.gridUnit * 36
     height: Kirigami.Units.gridUnit * 18
     background: Rectangle {
         color: Kirigami.Theme.backgroundColor
@@ -94,9 +97,23 @@ Popup {
     function _writeToWindow(v) {
         const win = root.targetWindow
         if (!win) return
+        root._writing = true
         win.frameGeometry = Qt.rect(v.x, v.y, v.width, v.height)
         win.opacity = v.opacity / 100
+        root._writing = false
         root.repaintTrick?.trigger()
+    }
+
+    function _syncFromWindow() {
+        const win = root.targetWindow
+        if (!win || root._writing) return
+        root._setValues(root._windowValues(win))
+    }
+
+    Connections {
+        target: root.visible ? root.targetWindow : null
+        function onFrameGeometryChanged() { root._syncFromWindow() }
+        function onOpacityChanged() { root._syncFromWindow() }
     }
 
     function openFor(win, pos, origGeo, origOpacity) {
@@ -144,14 +161,18 @@ Popup {
     function applyGeometry() {
         const win = root.targetWindow
         if (!win) return
+        root._writing = true
         win.frameGeometry = Qt.rect(geoXSpin.value, geoYSpin.value, geoWSpin.value, geoHSpin.value)
+        root._writing = false
         root.repaintTrick?.trigger()
     }
 
     function applyOpacity() {
         const win = root.targetWindow
         if (!win) return
+        root._writing = true
         win.opacity = opacitySpin.value / 100
+        root._writing = false
     }
 
     // The one exit path. revert=true puts the window back the way it was;
@@ -217,6 +238,12 @@ Popup {
                             Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                             onValueModified: root.applyGeometry()
                         }
+                        PlasmaComponents3.Label {
+                            text: Math.round(root.originalGeometry.x)
+                            opacity: 0.6
+                            horizontalAlignment: Text.AlignRight
+                            Layout.preferredWidth: Kirigami.Units.gridUnit * 2
+                        }
                     }
 
                     RowLayout {
@@ -239,6 +266,12 @@ Popup {
                             stepSize: 1
                             Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                             onValueModified: root.applyGeometry()
+                        }
+                        PlasmaComponents3.Label {
+                            text: Math.round(root.originalGeometry.y)
+                            opacity: 0.6
+                            horizontalAlignment: Text.AlignRight
+                            Layout.preferredWidth: Kirigami.Units.gridUnit * 2
                         }
                     }
 
@@ -263,6 +296,12 @@ Popup {
                             Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                             onValueModified: root.applyGeometry()
                         }
+                        PlasmaComponents3.Label {
+                            text: Math.round(root.originalGeometry.width)
+                            opacity: 0.6
+                            horizontalAlignment: Text.AlignRight
+                            Layout.preferredWidth: Kirigami.Units.gridUnit * 2
+                        }
                     }
 
                     RowLayout {
@@ -285,6 +324,12 @@ Popup {
                             stepSize: 1
                             Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                             onValueModified: root.applyGeometry()
+                        }
+                        PlasmaComponents3.Label {
+                            text: Math.round(root.originalGeometry.height)
+                            opacity: 0.6
+                            horizontalAlignment: Text.AlignRight
+                            Layout.preferredWidth: Kirigami.Units.gridUnit * 2
                         }
                     }
                 }
@@ -314,6 +359,12 @@ Popup {
                         stepSize: 1
                         Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                         onValueModified: root.applyOpacity()
+                    }
+                    PlasmaComponents3.Label {
+                        text: Math.round(root.originalOpacity * 100)
+                        opacity: 0.6
+                        horizontalAlignment: Text.AlignRight
+                        Layout.preferredWidth: Kirigami.Units.gridUnit * 2
                     }
                 }
             }

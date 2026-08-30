@@ -1,8 +1,10 @@
 # Thumbnail Grid ++
 
-## Extra features
+**A task switcher for power users.** TG++ is a drop-in replacement for KWin's Thumbnail Grid, that turns Alt+Tab into a window manager: see window state at a glance, control windows with buttons or keyboard shortcuts, and run custom shell or JavaScript commands.
 
-Compared to the stock Thumbnail Grid switcher:
+![TG++](docs/tgpp_expanded.png)
+
+## Added features
 
 1. **Highly customizable** - click the Settings button or press `F2` while the task switcher is open.
 	- Settings window stays open when task switcher is closed.
